@@ -1,0 +1,52 @@
+[package]
+edition = "2024"
+name = "waveshare_p4_eth"
+rust-version = "1.91"
+version = "0.1.0"
+
+[dependencies]
+embedded-graphics = "0.8.1"
+critical-section = "1.2.0"
+esp-hal = { version = "=1.2.0", default-features = false, features = [
+    "esp32p4",
+    "rt",
+    "unstable",
+] }
+esp-println = { version = "=0.18.0", default-features = false, features = [
+    "esp32p4",
+    "uart",
+] }
+embassy-executor = { version = "0.9.1", features = [
+    "arch-riscv32",
+    "executor-thread",
+] }
+embassy-net = { version = "0.9.1", default-features = false, features = [
+    "auto-icmp-echo-reply",
+    "log",
+    "medium-ethernet",
+    "multicast",
+    "proto-ipv4",
+    "udp",
+] }
+embassy-time = { version = "0.5.1", default-features = false }
+esp-p4-eth = { version = "0.1.0", default-features = false, features = [
+    "embassy-net-icmp",
+    "embassy-net-udp",
+    "p4-time-driver",
+] }
+heapless = { version = "0.9.3", default-features = false }
+log = "0.4.33"
+panic-halt = "1.0.0"
+riscv = "0.15.0"
+riscv-rt = { version = "0.16.0", features = ["device", "memory"] }
+static_cell = "2.1.1"
+esp-bootloader-esp-idf = { version = "=0.6.0", features = ["esp32p4"] }
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+codegen-units = 1
+debug = 2
+lto = "fat"
+opt-level = 1
