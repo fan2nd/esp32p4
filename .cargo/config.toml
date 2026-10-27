@@ -1,15 +1,12 @@
 [target.riscv32imafc-unknown-none-elf]
-runner = "espflash flash --monitor --chip esp32p4 --min-chip-rev 3.2"
+runner = "espflash flash --monitor --chip esp32p4"
 
 [env]
 ESP_LOG = "info"
-ESP_HAL_CONFIG_MIN_CHIP_REVISION = "302"
+ESP_HAL_CONFIG_MIN_CHIP_REVISION = "301"
 
 [build]
-rustflags = [
-  "-C",
-  "force-frame-pointers",
-]
+rustflags = ["-C", "force-frame-pointers"]
 target = "riscv32imafc-unknown-none-elf"
 
 [unstable]

@@ -152,9 +152,9 @@ pub fn init(
     // SLPOUT: wake the panel and wait for its internal circuits to stabilize.
     dbi.write_cmd(0x11, &[]).expect("DSI sleep-out failed");
     delay.delay_millis(120);
-    // MADCTL: no standard mirror/axis-exchange/BGR bits; physical orientation
-    // still depends on panel wiring and the vendor scan configuration.
-    dbi.write_cmd(0x36, &[0x00])
+    // MADCTL: set BGR order (bit 3) to correct the observed red/blue swap.
+    // Keep mirror and axis-exchange bits clear; verify with labeled RGB patches.
+    dbi.write_cmd(0x36, &[0x08])
         .expect("DSI orientation setup failed");
     // COLMOD: initial RGB888 format; the vendor table later overwrites it.
     dbi.write_cmd(0x3A, &[0x77])

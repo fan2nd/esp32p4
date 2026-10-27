@@ -6,7 +6,7 @@ use embedded_graphics::{
     mono_font::{MonoTextStyle, ascii::FONT_10X20},
     pixelcolor::Rgb888,
     prelude::*,
-    primitives::{Line, PrimitiveStyle},
+    primitives::{Line, PrimitiveStyle, Rectangle},
     text::{Baseline, Text},
 };
 use esp_hal::{
@@ -38,7 +38,7 @@ fn main() -> ! {
         "verify_display: display ready; native origin=(0,0) top-left, x right 0..719, y down 0..1279"
     );
     esp_println::println!(
-        "verify_display: coordinate guide on dark background; native panel orientation"
+        "verify_display: pure black background; labeled RGB, white and gray patches"
     );
     loop {
         Delay::new().delay_millis(1000);
@@ -76,7 +76,8 @@ impl DrawTarget for Framebuffer<'_> {
 fn draw_pattern(framebuffer: &mut [u8]) {
     assert_eq!(framebuffer.len(), WIDTH as usize * HEIGHT as usize * 3);
     let mut target = Framebuffer(framebuffer);
-    target.clear(Rgb888::new(0x12, 0x1c, 0x2c)).unwrap();
+    // A zero-valued background distinguishes black-level tint from RGB channel swaps.
+    target.clear(Rgb888::BLACK).unwrap();
     let stroke = PrimitiveStyle::with_stroke(Rgb888::WHITE, 2);
     for (start, end) in [
         ((40, 80), (650, 80)),
@@ -92,9 +93,31 @@ fn draw_pattern(framebuffer: &mut [u8]) {
             .unwrap();
     }
     let font = MonoTextStyle::new(&FONT_10X20, Rgb888::WHITE);
+    // Draw before DMA starts; labels describe intended colors, independently of panel output.
+    for (index, (label, color)) in [
+        ("RED", Rgb888::RED),
+        ("GREEN", Rgb888::GREEN),
+        ("BLUE", Rgb888::BLUE),
+        ("WHITE", Rgb888::WHITE),
+        ("GRAY32", Rgb888::new(32, 32, 32)),
+        ("GRAY128", Rgb888::new(128, 128, 128)),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let x = 60 + index as i32 * 100;
+        Rectangle::new(Point::new(x, 180), Size::new(90, 100))
+            .into_styled(PrimitiveStyle::with_fill(color))
+            .draw(&mut target)
+            .unwrap();
+        Text::with_baseline(label, Point::new(x, 290), font, Baseline::Top)
+            .draw(&mut target)
+            .unwrap();
+    }
     for (position, text) in [
         ((12, 12), "ORIGIN (0,0): TOP LEFT"),
         ((55, 95), "(40,80)"),
+        ((60, 340), "BACKGROUND: RGB(0,0,0)"),
         ((540, 50), "X RIGHT"),
         ((55, 1170), "Y DOWN"),
         ((540, 1220), "720x1280"),

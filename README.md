@@ -1,16 +1,24 @@
 # Waveshare ESP32-P4 ETH mDNS + MIPI DSI
 
-Waveshare ESP32-P4-ETH mDNS demo for ESP32-P4 chip revision 3.2.
+Waveshare ESP32-P4-ETH mDNS demo, currently configured for minimum chip revision 3.1.
 
-The display path uses stable `esp-hal 1.2.0`'s MIPI-DSI DBI driver. It applies
+The display path uses stable `esp-hal 1.2.0`'s MIPI-DSI DBI and DPI drivers. It applies
 the Waveshare HX8394 power and vendor sequence for the 5-DSI-TOUCH-A panel
-(720×1280, two lanes), then fills its RGB565 address space green.
+(720×1280, two lanes at 700 Mbps per lane), then streams an RGB888 PSRAM
+framebuffer through DPI/VDMA. The main binary displays black; `verify_display`
+draws a coordinate guide. See [the initialization summary](doc/DISPLAY_INIT.md)
+for the sequence, delays, panel commands, and clock/timing parameters.
 
 ## Notes
 
-- The build is pinned for chip revision `3.2` via `ESP_HAL_CONFIG_MIN_CHIP_REVISION=302`.
+- Hardware pinouts: [ESP32-P4-ETH (original board)](doc/pinout.md) and
+  [ESP32-P4-NANO-WIFI6-DB (replacement board)](doc/pinout-nano-wifi6-db.md).
+
+- The build minimum is chip revision `3.1` via `ESP_HAL_CONFIG_MIN_CHIP_REVISION=301`.
 - Ethernet uses the board's RMII PHY path through `esp-p4-eth`.
-- The image is flashed with the espflash runner configured for chip revision 3.2.
+- The Cargo runner uses `espflash flash --monitor --chip esp32p4`.
+  The replacement v3.1 board's post-flash reset issue is documented in
+  `doc/DISPLAY_DEBUG.md`.
 - The demo advertises `waveshare-p4-eth.local` and a small `_http._tcp.local` service.
 
 ## Flash
