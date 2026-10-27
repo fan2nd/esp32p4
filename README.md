@@ -33,6 +33,7 @@ Hardware verification binaries are discovered from `src/bin`:
 cargo run --release --bin verify_display
 cargo run --release --bin verify_touch
 cargo run --release --bin verify_audio
+cargo run --release --bin pet
 ```
 
 `verify_touch` polls GT911 at `0x5D` and `0x14`, reports probe failures and
@@ -40,5 +41,9 @@ prints all four coordinate rotations. Native coordinates are `(0,0)` at the
 top-left, x increasing right and y increasing down. `verify_audio` initializes
 ES8311, records 3 seconds through I2S0 DMA, then plays the buffer through the
 codec.
+
+`pet` displays a static whale-girl companion and greeting. Its screen, memory
+requirements, and artwork are described in
+[the pet guide](doc/PET.md).
 
 Adjust the static IPv4 settings in `src/board.rs` if your LAN does not use `192.168.1.0/24`.
