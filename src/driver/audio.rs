@@ -36,7 +36,9 @@ impl Es8311 {
             (0x37, 0x08),
             (0x17, 0xC8), // Analog microphone ADC gain from microphone_config.
             (0x14, 0x1A),
-            (0x32, 0xFF),
+            // DAC volume: -95.5 dB + register * 0.5 dB. 0xBF is unity;
+            // 0xFF adds +32 dB and clips ordinary USB PCM at low host volume.
+            (0x32, 0xBF),
         ]
         .into_iter()
         .enumerate()

@@ -53,7 +53,13 @@ fn main() -> ! {
         .expect("I2C init failed")
         .with_sda(p.GPIO7)
         .with_scl(p.GPIO8);
-    let (_screen, _i2c) = display::init(p.MIPI_DSI, p.VDMA_CH0, i2c, buffer);
+    let (_screen, _i2c) = display::init(
+        p.MIPI_DSI,
+        p.VDMA_CH0,
+        i2c,
+        buffer,
+        display::DEFAULT_DPI_CONFIG,
+    );
     // VDMA needs its interrupt enabled to keep streaming the framebuffer.
     unsafe { riscv::interrupt::enable() };
     esp_println::println!("pet: greeting image ready");

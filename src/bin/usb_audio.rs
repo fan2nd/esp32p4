@@ -62,11 +62,11 @@ fn main() -> ! {
     let state = AudioState::default();
     let mut control = Control::new(&state);
     let mut ep_buffer = [0; 256];
-    let driver = Driver::new(
-        Usb::new_hs(p.USB_HS),
-        &mut ep_buffer,
-        DriverConfig::default(),
-    );
+    let mut usb_config = DriverConfig::default();
+    // UAC1 uses 1 ms full-speed frames; HS playback is not validated on Windows.
+    // The same J2 HS controller/PHY remains in use, limited to 12 Mbit/s.
+    usb_config.force_full_speed = true;
+    let driver = Driver::new(Usb::new_hs(p.USB_HS), &mut ep_buffer, usb_config);
     // Laboratory VID/PID only. Replace with an allocated pair for distribution.
     let mut config = embassy_usb::Config::new(0xcafe, 0x4011);
     config.manufacturer = Some("P4 Lab");
@@ -96,7 +96,7 @@ fn main() -> ! {
     // cross an await; the USB ISR only touches the HAL endpoint state.
     let last_packet = RefCell::new(Instant::now());
     esp_println::println!(
-        "usb_audio: UAC1 mono PCM16 16000 Hz; USB-A HS; isolate host VBUS before connecting"
+        "usb_audio: UAC1 mono PCM16 16000 Hz; USB-A HS controller, full-speed UAC1"
     );
 
     let playback = async {
@@ -122,7 +122,7 @@ fn main() -> ! {
         let mut packet = [0; MAX_PACKET];
         loop {
             mic.wait_enabled().await;
-            let nominal = if usb_audio::high_speed() { 2 } else { 16 };
+            let nominal = 16; // One full-speed packet per millisecond.
             let mut primed = false;
             loop {
                 let n = {
@@ -158,22 +158,14 @@ fn main() -> ! {
     let clock_feedback = async {
         loop {
             feedback.wait_enabled().await;
-            let hs = usb_audio::high_speed();
+
             loop {
                 // Occupancy servo: +/- 0.5% around 16 kHz. The host adjusts
                 // packet sizes to match the independently clocked codec.
                 let error = TARGET as i32 - state.playback.borrow().len() as i32;
-                let correction = (error * 4).clamp(-655, 655);
-                let value = if hs {
-                    (2 * 65536 + correction) as u32
-                } else {
-                    (16 * 16384 + correction * 2) as u32
-                };
-                if feedback
-                    .write(&value.to_le_bytes()[..if hs { 4 } else { 3 }])
-                    .await
-                    .is_err()
-                {
+                let correction = (error * 8).clamp(-1310, 1310);
+                let value = (16 * 16384 + correction) as u32; // UAC1 10.14 samples/frame.
+                if feedback.write(&value.to_le_bytes()[..3]).await.is_err() {
                     break;
                 }
             }
@@ -242,6 +234,13 @@ fn main() -> ! {
             yield_now().await;
         }
     };
+    // This bare-metal binary uses block_on rather than an executor, so it
+    // must enable machine interrupts for the USB and DMA handlers itself.
+    unsafe { riscv::interrupt::enable() };
+    esp_println::println!(
+        "usb_audio: interrupts enabled={}",
+        riscv::register::mstatus::read().mie()
+    );
     block_on(join(
         usb.run(),
         join(audio, join(playback, join(capture, clock_feedback))),

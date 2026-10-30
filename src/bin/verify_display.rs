@@ -33,7 +33,13 @@ fn main() -> ! {
     let framebuffer = unsafe { core::slice::from_raw_parts_mut(fb_ptr, display::FRAMEBUFFER_SIZE) };
     draw_pattern(framebuffer);
     // Draw before DMA starts and keep the DPI handle alive while streaming.
-    let (_display, _i2c) = display::init(p.MIPI_DSI, p.VDMA_CH0, i2c, framebuffer);
+    let (_display, _i2c) = display::init(
+        p.MIPI_DSI,
+        p.VDMA_CH0,
+        i2c,
+        framebuffer,
+        display::DEFAULT_DPI_CONFIG,
+    );
     esp_println::println!(
         "verify_display: display ready; native origin=(0,0) top-left, x right 0..719, y down 0..1279"
     );

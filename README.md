@@ -53,6 +53,12 @@ requirements, and artwork are described in
 
 Adjust the static IPv4 settings in `src/board.rs` if your LAN does not use `192.168.1.0/24`.
 
+## Touchscreen macro keyboard
+
+`keyboard` provides eight large touch keys (2 columns × 4 rows), four layers,
+USB HID keyboard/media controls and VIA remapping. See [setup, VIA definition and
+the required persistent-storage partition table](doc/KEYBOARD.md).
+
 ## USB microphone + speaker (P4+C5 board)
 
 `cargo run --release --bin usb_audio` builds a standalone UAC1 device using

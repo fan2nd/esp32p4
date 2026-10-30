@@ -19,6 +19,29 @@ pub const WIDTH: u16 = 720;
 pub const HEIGHT: u16 = 1280;
 pub const FRAMEBUFFER_SIZE: usize = WIDTH as usize * HEIGHT as usize * 3;
 
+/// Known working RGB888 scanout; individual applications may change input format/timing.
+pub const DEFAULT_DPI_CONFIG: DpiConfig = DpiConfig {
+    virtual_channel: 0,
+    pixel_clock_mhz: 58.0,
+    // Waveshare's IDF default source is PLL_F240M.  With the
+    // 160 MHz source esp-hal can only realize 53.33 MHz for the
+    // requested 58 MHz clock, which leaves the panel outside the
+    // example's timing margin and can show as light flicker.
+    dpi_clk_src: DpiClockSource::PllF240m,
+    in_color_format: ColorFormat::Rgb888,
+    out_color_format: ColorFormat::Rgb888,
+    timing: FrameTiming {
+        h_active: WIDTH as u32,
+        hsw: 20,
+        hbp: 20,
+        hfp: 52,
+        v_active: HEIGHT as u32,
+        vsw: 4,
+        vbp: 10,
+        vfp: 24,
+    },
+};
+
 const HX8394_VENDOR_INIT: &[(u8, &[u8])] = &[
     // SETEXTC: unlock HX8394 vendor registers.
     (0xB9, &[0xFF, 0x83, 0x94]),
@@ -108,12 +131,13 @@ const HX8394_VENDOR_INIT: &[(u8, &[u8])] = &[
     ),
 ];
 
-/// Initialise the panel and prepare the RGB888 framebuffer before starting DMA.
+/// Initialise the panel and start DMA with the requested framebuffer format/timing.
 pub fn init(
     dsi: MIPI_DSI<'static>,
     vdma: VDMA_CH0<'static>,
     mut i2c: I2c<'static, Blocking>,
     framebuffer: &'static mut [u8],
+    config: DpiConfig,
 ) -> (
     esp_hal::mipi_dsi::dpi::DsiDpi<'static>,
     I2c<'static, Blocking>,
@@ -183,40 +207,28 @@ pub fn init(
     drop(dbi);
     esp_println::println!("display: panel ready, fill");
 
-    // The IDF example uses RGB888 DPI video mode. Use one PSRAM framebuffer;
-    // the DSI DMA reads it continuously after this function returns.
-    assert_eq!(framebuffer.len(), WIDTH as usize * HEIGHT as usize * 3);
+    // The DSI DMA continuously scans one frame; a second equally sized frame
+    // enables back-buffer drawing without changing the panel's wire format.
+    let bytes_per_pixel = match config.in_color_format {
+        ColorFormat::Rgb888 => 3,
+        ColorFormat::Rgb565 => 2,
+    };
+    let frame_size = WIDTH as usize * HEIGHT as usize * bytes_per_pixel;
+    assert!(framebuffer.len() == frame_size || framebuffer.len() == frame_size * 2);
+    // Panel remains configured for RGB888; the bridge expands RGB565 input.
+    assert_eq!(config.out_color_format, ColorFormat::Rgb888);
     assert_eq!(
         framebuffer.as_ptr() as usize & 63,
         0,
         "PSRAM framebuffer is not aligned"
     );
-    let dpi = bus
-        .dpi(
-            DpiConfig {
-                virtual_channel: 0,
-                pixel_clock_mhz: 58.0,
-                // Waveshare's IDF default source is PLL_F240M.  With the
-                // 160 MHz source esp-hal can only realize 53.33 MHz for the
-                // requested 58 MHz clock, which leaves the panel outside the
-                // example's timing margin and can show as light flicker.
-                dpi_clk_src: DpiClockSource::PllF240m,
-                in_color_format: ColorFormat::Rgb888,
-                out_color_format: ColorFormat::Rgb888,
-                timing: FrameTiming {
-                    h_active: WIDTH as u32,
-                    hsw: 20,
-                    hbp: 20,
-                    hfp: 52,
-                    v_active: HEIGHT as u32,
-                    vsw: 4,
-                    vbp: 10,
-                    vfp: 24,
-                },
-            },
-            &[framebuffer],
-        )
-        .expect("MIPI DPI init failed");
+    let dpi = if framebuffer.len() == frame_size {
+        bus.dpi(config, &[framebuffer])
+    } else {
+        let (front, back) = framebuffer.split_at_mut(frame_size);
+        bus.dpi(config, &[front, back])
+    }
+    .expect("MIPI DPI init failed");
     esp_println::println!("display: dpi streaming");
     (dpi, i2c)
 }

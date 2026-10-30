@@ -76,3 +76,17 @@ hosted: PASS init + 3 version RPCs + 3 scans + 45s heartbeat
 
 失败会打印 `hosted: FAIL` 或拒绝 INIT 的具体原因。构建通过和握手单元测试通过
 不能代替这条板上 PASS 日志；此检查也不验证 BLE、联网吞吐或音频。
+
+## Windows 合并后编译验证（2026-10-31）
+
+拉取 `a944c38` 并保留本地键盘、USB Audio 修改后，Git 依赖下载完成。
+`cargo build --release --bin keyboard --bin usb_audio --bin verify_hosted`
+通过，三个固件均完成目标平台编译和链接。
+
+Windows 主机测试最初缺少 `_embassy_time_now`、计时唤醒和临界区符号。
+已在独立的 `tests/hosted/Cargo.toml` 中启用 `embassy-time` 的 `std`、
+`generic-queue-8` 和 `critical-section/std`，提供桌面测试所需实现；
+不改变 P4 固件的计时器或临界区配置。
+
+使用 `--target x86_64-pc-windows-msvc` 运行三个独立测试工程：Hosted 4 项、
+键盘 4 项、USB Audio 2 项，全部通过。本轮只做构建和主机测试，未烧录或验证 C5 握手。

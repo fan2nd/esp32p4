@@ -542,6 +542,7 @@ dependencies = [
  "embassy-usb-driver",
  "embedded-io-async 0.6.1",
  "heapless 0.8.0",
+ "log",
 ]
 
 [[package]]
@@ -557,13 +558,12 @@ dependencies = [
 [[package]]
 name = "embassy-usb-synopsys-otg"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6efd0c0e0b21bcf91b475b8fa47347c1df32c9a99728ae1e1b0e6625862dfd1a"
 dependencies = [
  "critical-section",
  "embassy-sync 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "embassy-time",
  "embassy-usb-driver",
+ "log",
  "portable-atomic",
 ]
 
@@ -1723,11 +1723,13 @@ dependencies = [
  "embassy-net-esp-hosted",
  "embassy-time",
  "embassy-usb",
+ "embassy-usb-synopsys-otg",
  "embedded-graphics",
  "esp-bootloader-esp-idf",
  "esp-hal",
  "esp-p4-eth",
  "esp-println",
+ "esp-storage",
  "heapless 0.9.3",
  "log",
  "panic-halt",

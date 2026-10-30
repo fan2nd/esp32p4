@@ -1,6 +1,7 @@
 #![no_std]
 
 pub mod board;
+pub mod keyboard;
 
 /// Hardware-facing drivers: panel, codec, and touch controller.
 pub mod driver {

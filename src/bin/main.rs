@@ -33,8 +33,13 @@ fn main() -> ! {
     let framebuffer = unsafe { core::slice::from_raw_parts_mut(fb_ptr, display::FRAMEBUFFER_SIZE) };
     assert!(fb_len >= display::FRAMEBUFFER_SIZE);
     framebuffer.fill(0);
-    let (_display, _i2c) =
-        display::init(peripherals.MIPI_DSI, peripherals.VDMA_CH0, i2c, framebuffer);
+    let (_display, _i2c) = display::init(
+        peripherals.MIPI_DSI,
+        peripherals.VDMA_CH0,
+        i2c,
+        framebuffer,
+        display::DEFAULT_DPI_CONFIG,
+    );
     esp_println::println!("app: display ready");
 
     release_waveshare_phy_reset();

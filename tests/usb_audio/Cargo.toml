@@ -7,5 +7,6 @@ edition = "2024"
 path = "../../src/driver/usb_audio.rs"
 
 [dependencies]
+critical-section = { version = "1.2", features = ["std"] }
 embassy-usb = { version = "=0.5.1", default-features = false }
 heapless = { version = "=0.9.3", default-features = false }

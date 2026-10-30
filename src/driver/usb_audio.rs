@@ -66,9 +66,13 @@ impl<'a> Control<'a> {
 }
 impl Handler for Control<'_> {
     fn reset(&mut self) {
+        #[cfg(target_arch = "riscv32")]
+        esp_println::println!("usb_audio: USB bus reset");
         self.state.reset();
     }
     fn configured(&mut self, configured: bool) {
+        #[cfg(target_arch = "riscv32")]
+        esp_println::println!("usb_audio: USB configured={}", configured);
         if !configured {
             self.state.reset();
         }
@@ -79,6 +83,8 @@ impl Handler for Control<'_> {
         self.state.capture.borrow_mut().clear();
     }
     fn set_alternate_setting(&mut self, interface: InterfaceNumber, alt: u8) {
+        #[cfg(target_arch = "riscv32")]
+        esp_println::println!("usb_audio: interface={} alt={}", u8::from(interface), alt);
         if u8::from(interface) == self.speaker_interface {
             self.state.playing.set(alt == 1);
             self.state.playback.borrow_mut().clear();
@@ -145,7 +151,8 @@ pub fn build<'d, D: Driver<'d>>(
     alt.descriptor(0x24, &[1, 1, 0, 1, 0]);
     alt.descriptor(0x24, &[2, 1, 1, 2, 16, 1, 0x80, 0x3e, 0]);
     let speaker = alt.alloc_endpoint_out(EndpointType::Isochronous, None, MAX_PACKET as u16, 1);
-    let feedback = alt.alloc_endpoint_in(EndpointType::Isochronous, None, 4, 1);
+    // UAC1 feedback is three-byte 10.14; do not advertise UAC2's four-byte format.
+    let feedback = alt.alloc_endpoint_in(EndpointType::Isochronous, None, 3, 1);
     alt.endpoint_descriptor(
         speaker.info(),
         SynchronizationType::Asynchronous,
@@ -182,14 +189,6 @@ pub fn build<'d, D: Driver<'d>>(
         mic,
         feedback,
     }
-}
-
-/// DWC2 DSTS.ENUMSPD, bits 2:1: 0 = HS, 1/3 = FS.
-/// Read-only access: the HAL owns all configuration and interrupts. This driver
-/// needs negotiated speed because bInterval=1 means 125 us at HS and 1 ms at FS.
-pub fn high_speed() -> bool {
-    // ESP32-P4 USB_HS base 0x50000000, DSTS offset 0x808 (DWC2 register map).
-    unsafe { core::ptr::read_volatile(0x5000_0808 as *const u32) & 6 == 0 }
 }
 
 #[cfg(test)]
