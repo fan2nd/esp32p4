@@ -41,6 +41,8 @@ riscv = "0.15.0"
 riscv-rt = { version = "0.16.0", features = ["device", "memory"] }
 static_cell = "2.1.1"
 esp-bootloader-esp-idf = { version = "=0.6.0", features = ["esp32p4"] }
+embassy-usb = { version = "0.5", default-features = false }
+embassy-futures = "0.1.2"
 
 [profile.dev]
 opt-level = 1

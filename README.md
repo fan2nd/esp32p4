@@ -47,3 +47,11 @@ requirements, and artwork are described in
 [the pet guide](doc/PET.md).
 
 Adjust the static IPv4 settings in `src/board.rs` if your LAN does not use `192.168.1.0/24`.
+
+## USB microphone + speaker (P4+C5 board)
+
+`cargo run --release --bin usb_audio` builds a standalone UAC1 device using
+the NANO-WIFI6-DB USB-A HS port and onboard ES8311 (mono PCM16, 16 kHz).
+Read [USB audio setup and validation](doc/USB_AUDIO.md) before connecting: the
+USB-A port supplies 5 V and requires host VBUS isolation for this experiment.
+Do not connect a normal powered A-to-A cable. Hardware validation is pending.

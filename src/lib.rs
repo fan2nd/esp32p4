@@ -7,6 +7,7 @@ pub mod driver {
     pub mod audio;
     pub mod display;
     pub mod touch;
+    pub mod usb_audio;
 }
 
 /// Executor-facing long-lived application tasks.

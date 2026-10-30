@@ -1,0 +1,11 @@
+[package]
+name = "usb-audio-host-tests"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "../../src/driver/usb_audio.rs"
+
+[dependencies]
+embassy-usb = { version = "=0.5.1", default-features = false }
+heapless = { version = "=0.9.3", default-features = false }

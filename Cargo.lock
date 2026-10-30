@@ -486,6 +486,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "embassy-usb"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc4462e48b19a4f401a11901bdd981aab80c6a826608016a0bdc73cbbab31954"
+dependencies = [
+ "embassy-futures",
+ "embassy-net-driver-channel",
+ "embassy-sync 0.7.2",
+ "embassy-usb-driver",
+ "embedded-io-async 0.6.1",
+ "heapless 0.8.0",
+]
+
+[[package]]
 name = "embassy-usb-driver"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1648,8 +1662,10 @@ version = "0.1.0"
 dependencies = [
  "critical-section",
  "embassy-executor",
+ "embassy-futures",
  "embassy-net",
  "embassy-time",
+ "embassy-usb",
  "embedded-graphics",
  "esp-bootloader-esp-idf",
  "esp-hal",
