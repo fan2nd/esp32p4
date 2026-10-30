@@ -317,9 +317,9 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0641612053b2f34fc250bb63f6630ae75de46e02ade7f457268447081d709ce"
 dependencies = [
- "embassy-futures",
+ "embassy-futures 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "embassy-hal-internal",
- "embassy-sync 0.8.0",
+ "embassy-sync 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
@@ -365,6 +365,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc2d050bdc5c21e0862a89256ed8029ae6c290a93aecefc73084b3002cdebb01"
 
 [[package]]
+name = "embassy-futures"
+version = "0.1.2"
+source = "git+https://github.com/embassy-rs/embassy?rev=cd5f2d0e695e69fa474bda27710094d91bd93aa4#cd5f2d0e695e69fa474bda27710094d91bd93aa4"
+
+[[package]]
 name = "embassy-hal-internal"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -381,7 +386,7 @@ checksum = "347bc855bdbdf50ed9c5a1d80e8204badb0ba149b8732dde38e1e9708ed9d313"
 dependencies = [
  "document-features",
  "embassy-net-driver",
- "embassy-sync 0.8.0",
+ "embassy-sync 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "embassy-time",
  "embedded-io-async 0.7.0",
  "embedded-nal-async",
@@ -403,9 +408,37 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7b2739fbcf6cd206ae08779c7d709087b16577d255f2ea4a45bc4bbbf305b3f"
 dependencies = [
- "embassy-futures",
+ "embassy-futures 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "embassy-net-driver",
  "embassy-sync 0.7.2",
+]
+
+[[package]]
+name = "embassy-net-driver-channel"
+version = "0.4.0"
+source = "git+https://github.com/embassy-rs/embassy?rev=cd5f2d0e695e69fa474bda27710094d91bd93aa4#cd5f2d0e695e69fa474bda27710094d91bd93aa4"
+dependencies = [
+ "embassy-sync 0.8.0 (git+https://github.com/embassy-rs/embassy?rev=cd5f2d0e695e69fa474bda27710094d91bd93aa4)",
+ "xarxa-driver",
+]
+
+[[package]]
+name = "embassy-net-esp-hosted"
+version = "0.3.0"
+source = "git+https://github.com/embassy-rs/embassy?rev=cd5f2d0e695e69fa474bda27710094d91bd93aa4#cd5f2d0e695e69fa474bda27710094d91bd93aa4"
+dependencies = [
+ "aligned",
+ "document-features",
+ "embassy-futures 0.1.2 (git+https://github.com/embassy-rs/embassy?rev=cd5f2d0e695e69fa474bda27710094d91bd93aa4)",
+ "embassy-net-driver-channel 0.4.0",
+ "embassy-sync 0.8.0 (git+https://github.com/embassy-rs/embassy?rev=cd5f2d0e695e69fa474bda27710094d91bd93aa4)",
+ "embassy-time",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "heapless 0.9.3",
+ "log",
+ "micropb",
+ "sdio",
 ]
 
 [[package]]
@@ -443,6 +476,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7bbd85cf5a5ae56bdf26f618364af642d1d0a4e245cdd75cd9aabda382f65a81"
 dependencies = [
  "cfg-if",
+ "critical-section",
+ "embedded-io-async 0.7.0",
+ "futures-core",
+ "futures-sink",
+ "heapless 0.9.3",
+]
+
+[[package]]
+name = "embassy-sync"
+version = "0.8.0"
+source = "git+https://github.com/embassy-rs/embassy?rev=cd5f2d0e695e69fa474bda27710094d91bd93aa4#cd5f2d0e695e69fa474bda27710094d91bd93aa4"
+dependencies = [
  "critical-section",
  "embedded-io-async 0.7.0",
  "futures-core",
@@ -491,8 +536,8 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc4462e48b19a4f401a11901bdd981aab80c6a826608016a0bdc73cbbab31954"
 dependencies = [
- "embassy-futures",
- "embassy-net-driver-channel",
+ "embassy-futures 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "embassy-net-driver-channel 0.3.2",
  "embassy-sync 0.7.2",
  "embassy-usb-driver",
  "embedded-io-async 0.6.1",
@@ -516,7 +561,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6efd0c0e0b21bcf91b475b8fa47347c1df32c9a99728ae1e1b0e6625862dfd1a"
 dependencies = [
  "critical-section",
- "embassy-sync 0.8.0",
+ "embassy-sync 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "embassy-time",
  "embassy-usb-driver",
  "portable-atomic",
@@ -714,9 +759,9 @@ dependencies = [
  "digest 0.11.3",
  "document-features",
  "embassy-embedded-hal",
- "embassy-futures",
+ "embassy-futures 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "embassy-net-driver",
- "embassy-sync 0.8.0",
+ "embassy-sync 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "embassy-usb-driver",
  "embassy-usb-synopsys-otg",
  "embedded-can",
@@ -791,9 +836,9 @@ checksum = "658467625487d965d939deaccdd629c05786abe37ff2b3ec4af7bf3a8db5c288"
 dependencies = [
  "critical-section",
  "embassy-executor",
- "embassy-futures",
+ "embassy-futures 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "embassy-net",
- "embassy-net-driver-channel",
+ "embassy-net-driver-channel 0.3.2",
  "embassy-sync 0.7.2",
  "embassy-time",
  "embassy-time-driver",
@@ -861,7 +906,7 @@ dependencies = [
  "document-features",
  "embassy-sync 0.6.2",
  "embassy-sync 0.7.2",
- "embassy-sync 0.8.0",
+ "embassy-sync 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "esp-metadata-generated",
  "riscv",
  "xtensa-lx",
@@ -1203,6 +1248,16 @@ name = "micromath"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3c8dda44ff03a2f238717214da50f65d5a53b45cd213a7370424ffdb6fae815"
+
+[[package]]
+name = "micropb"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1bfc6ec8daaec9373b02386de3f58b46c578122c48324bbee23bef86afd5240"
+dependencies = [
+ "heapless 0.9.3",
+ "num-traits",
+]
 
 [[package]]
 name = "nb"
@@ -1660,10 +1715,12 @@ checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 name = "waveshare_p4_eth"
 version = "0.1.0"
 dependencies = [
+ "aligned",
  "critical-section",
  "embassy-executor",
- "embassy-futures",
+ "embassy-futures 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "embassy-net",
+ "embassy-net-esp-hosted",
  "embassy-time",
  "embassy-usb",
  "embedded-graphics",
@@ -1676,6 +1733,7 @@ dependencies = [
  "panic-halt",
  "riscv",
  "riscv-rt",
+ "sdio",
  "static_cell",
 ]
 
@@ -1710,6 +1768,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "xarxa-driver"
+version = "0.1.0"
+source = "git+https://github.com/embassy-rs/xarxa?rev=8f6f33b131deb9ff3290e0e01079537e1ed7b2ad#8f6f33b131deb9ff3290e0e01079537e1ed7b2ad"
+dependencies = [
+ "document-features",
 ]
 
 [[package]]

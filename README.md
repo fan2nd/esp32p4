@@ -23,6 +23,11 @@ for the sequence, delays, panel commands, and clock/timing parameters.
 
 ## Flash
 
+The standalone `verify_hosted` binary runs the on-board C5 SDIO communication check
+in Rust, without initializing display, audio or Ethernet.
+Use the matching Packet + checksum coprocessor firmware and follow
+[the Hosted verification guide](doc/HOSTED_VERIFY.md).
+
 ```bash
 cargo run
 ```
