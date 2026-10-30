@@ -28,7 +28,8 @@ jobs:
           cd esp_hosted/examples/bluetooth/esp_hosted_nimble/bleprph_wifi_coex/cp
           cat >> sdkconfig.defaults <<'CONFIG'
           CONFIG_EH_TRANSPORT_CP_SDIO=y
-          CONFIG_EH_TRANSPORT_CP_SDIO_MODE_SW_AGGR=y
+          CONFIG_EH_TRANSPORT_CP_SDIO_MODE_PACKET=y
+          CONFIG_EH_TRANSPORT_CP_SDIO_CHECKSUM=y
           CONFIG_EH_TRANSPORT_CP_SDIO_HIGH_SPEED=y
           CONFIG_EH_TRANSPORT_CP_SDIO_PSEND_PSAMPLE=y
           CONFIG_EH_TRANSPORT_CP_SDIO_GPIO_RESET=-1
@@ -52,7 +53,8 @@ jobs:
               'CONFIG_BT_CONTROLLER_ONLY=y',
               'CONFIG_BT_LE_HCI_INTERFACE_USE_RAM=y',
               'CONFIG_EH_TRANSPORT_CP_SDIO=y',
-              'CONFIG_EH_TRANSPORT_CP_SDIO_MODE_SW_AGGR=y',
+              'CONFIG_EH_TRANSPORT_CP_SDIO_MODE_PACKET=y',
+              'CONFIG_EH_TRANSPORT_CP_SDIO_CHECKSUM=y',
               'CONFIG_EH_TRANSPORT_CP_SDIO_GPIO_RESET=-1',
               'CONFIG_EH_TRANSPORT_CP_SDIO_PIN_CLK=9',
               'CONFIG_EH_TRANSPORT_CP_SDIO_PIN_CMD=10',
@@ -102,12 +104,12 @@ jobs:
               "esp_idf_version": subprocess.check_output(["idf.py", "--version"], text=True).strip(),
               "workflow_run": os.environ["GITHUB_SERVER_URL"] + "/" + os.environ["GITHUB_REPOSITORY"] + "/actions/runs/" + os.environ["GITHUB_RUN_ID"],
               "target": "esp32c5", "transport": "SDIO", "rpc": "v2", "flash_size": "4MB",
-              "features": ["Wi-Fi", "BLE HCI over SDIO"], "sdio_mode": "SW_AGGR",
+              "features": ["Wi-Fi", "BLE HCI over SDIO"], "sdio_mode": "PACKET", "sdio_checksum": True,
               "tested_on_hardware": False,
           }
           (out / "build-info.json").write_text(json.dumps(info, indent=2) + "\n")
           (out / "README.txt").write_text(
-              "ESP32-C5 ESP-Hosted-MCU v3.0.10; SDIO; Wi-Fi + BLE; 4 MB flash layout.\n"
+              "ESP32-C5 ESP-Hosted-MCU v3.0.10; SDIO Packet mode + checksum; Wi-Fi + BLE; 4 MB flash layout.\n"
               "Build verified only; not tested on hardware. Requires matching v3 host support.\n"
               "Merged image: flash at 0x0 to the C5, NOT the ESP32-P4.\n"
               "esptool --chip esp32c5 --port PORT write-flash 0x0 esp-hosted-v3.0.10-esp32c5-sdio-wifi-ble-merged.bin\n"
@@ -129,7 +131,7 @@ jobs:
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
-          name: esp-hosted-v3.0.10-esp32c5-sdio-wifi-ble
+          name: esp-hosted-v3.0.10-esp32c5-sdio-packet-checksum-wifi-ble
           path: firmware/
           if-no-files-found: error
           retention-days: 30
