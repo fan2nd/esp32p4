@@ -12,11 +12,11 @@ jobs:
     timeout-minutes: 30
     container: espressif/idf:v6.1
     steps:
-      - name: Checkout pinned ESP-Hosted v3.0.10
+      - name: Checkout pinned ESP-Hosted v3 with official Packet fix
         uses: actions/checkout@v4
         with:
           repository: espressif/esp-hosted-mcu
-          ref: 2e3f6c8bd717d67698319a6a24f9f4218d8db068
+          ref: 18574265e0ef4ef09cb31454e8930fc29ae301c1
           submodules: recursive
           path: esp_hosted
           persist-credentials: false
@@ -75,7 +75,7 @@ jobs:
           export FW_OUT="$GITHUB_WORKSPACE/firmware"
           mkdir -p "$FW_OUT"
           cd esp_hosted/examples/bluetooth/esp_hosted_nimble/bleprph_wifi_coex/cp
-          idf.py merge-bin -o "$FW_OUT/esp-hosted-v3.0.10-esp32c5-sdio-wifi-ble-merged.bin"
+          idf.py merge-bin -o "$FW_OUT/esp-hosted-v3.0.10-packet-fix-esp32c5-sdio-wifi-ble-merged.bin"
           python - <<'PY'
           import hashlib, json, os, pathlib, shutil, subprocess
           p = pathlib.Path
@@ -94,11 +94,11 @@ jobs:
           for name in ("sdkconfig.defaults", "sdkconfig.defaults.esp32c5"):
               shutil.copy2(name, out / name)
           app_name = args["app"]["file"]
-          shutil.copy2(build / app_name, out / "esp-hosted-v3.0.10-esp32c5-sdio-wifi-ble-app.bin")
+          shutil.copy2(build / app_name, out / "esp-hosted-v3.0.10-packet-fix-esp32c5-sdio-wifi-ble-app.bin")
           def git(*args):
               return subprocess.check_output(["git", *args], text=True).strip()
           info = {
-              "esp_hosted_version": "3.0.10",
+              "esp_hosted_version": "3.0.10 + upstream Packet fix (unreleased)",
               "esp_hosted_commit": git("rev-parse", "HEAD"),
               "esp_idf_commit": git("-C", os.environ["IDF_PATH"], "rev-parse", "HEAD"),
               "esp_idf_version": subprocess.check_output(["idf.py", "--version"], text=True).strip(),
@@ -109,10 +109,10 @@ jobs:
           }
           (out / "build-info.json").write_text(json.dumps(info, indent=2) + "\n")
           (out / "README.txt").write_text(
-              "ESP32-C5 ESP-Hosted-MCU v3.0.10; SDIO Packet mode + checksum; Wi-Fi + BLE; 4 MB flash layout.\n"
+              "ESP32-C5 ESP-Hosted-MCU v3.0.10 + official Packet fix 18574265; SDIO Packet mode + checksum; Wi-Fi + BLE; 4 MB flash layout.\n"
               "Build verified only; not tested on hardware. Requires matching v3 host support.\n"
               "Merged image: flash at 0x0 to the C5, NOT the ESP32-P4.\n"
-              "esptool --chip esp32c5 --port PORT write-flash 0x0 esp-hosted-v3.0.10-esp32c5-sdio-wifi-ble-merged.bin\n"
+              "esptool --chip esp32c5 --port PORT write-flash 0x0 esp-hosted-v3.0.10-packet-fix-esp32c5-sdio-wifi-ble-merged.bin\n"
               "App-only image is for a compatible OTA layout, not for flashing at 0x0.\n"
               "Separate images: use offsets in flasher_args.json / flash_args.\n"
               "Waveshare NANO-WIFI6-DB: C5 UART RX=P2-20, TX=P2-22, BOOT=P2-24.\n"
@@ -127,11 +127,11 @@ jobs:
           (out / "SHA256SUMS").write_text("\n".join(sums) + "\n")
           print(json.dumps(info, indent=2))
           PY
-          python -m esptool --chip esp32c5 image-info "$FW_OUT/esp-hosted-v3.0.10-esp32c5-sdio-wifi-ble-app.bin"
+          python -m esptool --chip esp32c5 image-info "$FW_OUT/esp-hosted-v3.0.10-packet-fix-esp32c5-sdio-wifi-ble-app.bin"
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
-          name: esp-hosted-v3.0.10-esp32c5-sdio-packet-checksum-wifi-ble
+          name: esp-hosted-v3.0.10-packet-fix-esp32c5-sdio-packet-checksum-wifi-ble
           path: firmware/
           if-no-files-found: error
           retention-days: 30
