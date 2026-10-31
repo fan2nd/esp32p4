@@ -27,12 +27,22 @@ const SCAN: u16 = 4;
 const DISCONNECT: u16 = 5;
 const CONNECT: u16 = 6;
 const NETWORKS: u16 = 7;
+const WIFI_TOGGLE: u16 = 38;
+const BLE_TOGGLE: u16 = 39;
+const SAVED_CONNECT: u16 = 40;
+const EDIT_PASSWORD: u16 = 41;
+const FORGET: u16 = 42;
+const TIME_SETTINGS: u16 = 43;
+const SYNC_TIME: u16 = 44;
 const TYPING: u16 = 100;
 const WIFI_SETTINGS: u16 = 30;
 const BLE_SETTINGS: u16 = 31;
 const BRIGHTNESS_SETTINGS: u16 = 32;
 const VOLUME_SETTINGS: u16 = 33;
 const SETTING_SLIDER: u16 = 34;
+const RESET_SETTINGS: u16 = 35;
+const CONFIRM_RESET: u16 = 36;
+const CANCEL_RESET: u16 = 37;
 // Keep existing page IDs stable for macro-key dispatch; 4 is the settings root.
 
 fn rect(x: i32, y: i32, w: u32, h: u32) -> Rectangle {
@@ -68,8 +78,17 @@ pub struct Network {
     pub ssid: String<32>,
     pub rssi: i32,
     pub secure: bool,
+    pub saved: bool,
+    pub connected: bool,
+    pub available: bool,
 }
 pub enum Action {
+    Reset,
+    SyncTime,
+    WifiEnabled(bool),
+    BleEnabled(bool),
+    ConnectSaved(String<32>),
+    Forget(String<32>),
     Brightness(u8),
     Volume(u8),
     BleName(String<24>),
@@ -90,6 +109,8 @@ pub struct Ui {
     clock: String<16>,
     ip: String<32>,
     message: String<96>,
+    wifi_enabled: bool,
+    ble_enabled: bool,
     wifi: bool,
     ble: bool,
     usb: bool,
@@ -100,6 +121,7 @@ pub struct Ui {
     ble_name: String<24>,
     settings_message: String<96>,
     ble_status_seen: String<96>,
+    save_status: String<96>,
 }
 impl Default for Ui {
     fn default() -> Self {
@@ -118,6 +140,8 @@ impl Ui {
             clock: String::try_from("--:--:--").unwrap(),
             ip: String::new(),
             message: String::new(),
+            wifi_enabled: true,
+            ble_enabled: false,
             wifi: false,
             ble: false,
             usb: false,
@@ -128,6 +152,7 @@ impl Ui {
             ble_name: String::try_from("P4 Desktop").unwrap(),
             settings_message: String::new(),
             ble_status_seen: String::new(),
+            save_status: String::new(),
         };
         v.rebuild();
         v
@@ -159,7 +184,16 @@ impl Ui {
                 self.button(KEYBOARD, rect(70, 566, 220, 50), "KEYBOARD");
             }
             1 => {
-                self.button(SCAN, rect(12, 60, 336, 44), "SCAN WIFI");
+                self.button(
+                    WIFI_TOGGLE,
+                    rect(12, 60, 160, 44),
+                    if self.wifi_enabled {
+                        "Wi-Fi ON"
+                    } else {
+                        "Wi-Fi OFF"
+                    },
+                );
+                self.button(SCAN, rect(184, 60, 164, 44), "SCAN");
                 let mut list = ListView::new(
                     NETWORKS,
                     rect(12, 150, 336, 374),
@@ -176,7 +210,23 @@ impl Ui {
                 self.scene.add(list).unwrap();
                 self.button(DISCONNECT, rect(12, 542, 336, 44), "DISCONNECT");
             }
+            9 => {
+                self.button(SAVED_CONNECT, rect(24, 180, 312, 60), "CONNECT SAVED");
+                self.button(EDIT_PASSWORD, rect(24, 270, 312, 60), "EDIT PASSWORD");
+                self.button(FORGET, rect(24, 360, 312, 60), "FORGET NETWORK");
+            }
             2 | 5 => {
+                if self.page == 5 {
+                    self.button(
+                        BLE_TOGGLE,
+                        rect(12, 60, 336, 40),
+                        if self.ble_enabled {
+                            "BLE ON - tap to turn OFF"
+                        } else {
+                            "BLE OFF - tap to turn ON"
+                        },
+                    );
+                }
                 let mut panel = Panel::new(8, rect(12, 112, 336, 52));
                 panel.base.style = style();
                 self.scene.add(panel).unwrap();
@@ -209,13 +259,22 @@ impl Ui {
             }
             4 => {
                 for (id, y, title) in [
-                    (WIFI_SETTINGS, 90, "Wi-Fi connection"),
-                    (BLE_SETTINGS, 190, "Bluetooth name"),
-                    (BRIGHTNESS_SETTINGS, 290, "Screen brightness"),
-                    (VOLUME_SETTINGS, 390, "Playback volume"),
+                    (WIFI_SETTINGS, 60, "Wi-Fi connection"),
+                    (BLE_SETTINGS, 144, "Bluetooth name"),
+                    (TIME_SETTINGS, 228, "Time synchronization"),
+                    (BRIGHTNESS_SETTINGS, 312, "Screen brightness"),
+                    (VOLUME_SETTINGS, 396, "Playback volume"),
+                    (RESET_SETTINGS, 480, "Reset settings"),
                 ] {
                     self.button(id, rect(16, y, 328, 72), title);
                 }
+            }
+            10 => {
+                self.button(SYNC_TIME, rect(24, 210, 312, 64), "SYNC NOW");
+            }
+            8 => {
+                self.button(CONFIRM_RESET, rect(24, 330, 312, 64), "RESET AND RESTART");
+                self.button(CANCEL_RESET, rect(24, 420, 312, 64), "Cancel");
             }
             6 | 7 => {
                 let (min, value) = if self.page == 6 {
@@ -238,7 +297,7 @@ impl Ui {
         }
     }
     pub fn navigate(&mut self, page: u8) -> Option<Action> {
-        if page > 7 {
+        if page > 10 {
             return None;
         }
         self.password.clear();
@@ -250,7 +309,11 @@ impl Ui {
             self.ble_status_seen.clear();
         }
         self.rebuild();
-        if page == 1 { Some(Action::Scan) } else { None }
+        if page == 1 && self.wifi_enabled {
+            Some(Action::Scan)
+        } else {
+            None
+        }
     }
     pub fn handle(&mut self, event: Event) -> Option<Action> {
         if event == Event::KeyDown(tiny_ui::Key::Escape) {
@@ -264,6 +327,11 @@ impl Ui {
             (BLE_SETTINGS, ActionKind::Clicked) => self.navigate(5),
             (BRIGHTNESS_SETTINGS, ActionKind::Clicked) => self.navigate(6),
             (VOLUME_SETTINGS, ActionKind::Clicked) => self.navigate(7),
+            (TIME_SETTINGS, ActionKind::Clicked) => self.navigate(10),
+            (SYNC_TIME, ActionKind::Clicked) => Some(Action::SyncTime),
+            (RESET_SETTINGS, ActionKind::Clicked) => self.navigate(8),
+            (CONFIRM_RESET, ActionKind::Clicked) => Some(Action::Reset),
+            (CANCEL_RESET, ActionKind::Clicked) => self.navigate(4),
             (SETTING_SLIDER, ActionKind::ValueChanged(value)) => {
                 self.invalidate(rect(24, 140, 312, 50));
                 if self.page == 6 {
@@ -274,6 +342,17 @@ impl Ui {
                 }
             }
             (KEYBOARD, ActionKind::Clicked) => self.navigate(3),
+            (WIFI_TOGGLE, ActionKind::Clicked) => Some(Action::WifiEnabled(!self.wifi_enabled)),
+            (BLE_TOGGLE, ActionKind::Clicked) => Some(Action::BleEnabled(!self.ble_enabled)),
+            (SAVED_CONNECT, ActionKind::Clicked) => {
+                Some(Action::ConnectSaved(self.selected.clone()))
+            }
+            (FORGET, ActionKind::Clicked) => {
+                let ssid = self.selected.clone();
+                self.navigate(1);
+                Some(Action::Forget(ssid))
+            }
+            (EDIT_PASSWORD, ActionKind::Clicked) => self.navigate(2),
             (SCAN, ActionKind::Clicked) => Some(Action::Scan),
             (DISCONNECT, ActionKind::Clicked) => Some(Action::Disconnect),
             (CONNECT, ActionKind::Clicked) => self.connect(),
@@ -282,7 +361,7 @@ impl Ui {
                     self.selected = ap.ssid.clone();
                     self.password.clear();
                     self.busy = false;
-                    self.page = 2;
+                    self.page = if ap.saved { 9 } else { 2 };
                     self.rebuild();
                 }
                 None
@@ -314,8 +393,8 @@ impl Ui {
     }
     fn parent_page(&self) -> u8 {
         match self.page {
-            2 => 1,
-            1 | 5 | 6 | 7 => 4,
+            2 | 9 => 1,
+            1 | 5 | 6 | 7 | 8 | 10 => 4,
             _ => 0,
         }
     }
@@ -347,6 +426,9 @@ impl Ui {
         } else {
             self.busy = true;
             self.invalidate(rect(12, 178, 336, 48));
+            if self.page == 9 {
+                self.invalidate(rect(20, 460, 320, 30));
+            }
         }
     }
     pub fn set_setting_message(&mut self, message: &str) {
@@ -354,6 +436,46 @@ impl Ui {
             copy_text(&mut self.settings_message, message);
             self.invalidate(rect(12, 178, 336, 48));
             self.invalidate(rect(12, 310, 336, 100));
+        }
+    }
+    pub fn sync_radio_switches(&mut self, wifi: bool, ble: bool) {
+        if self.wifi_enabled == wifi && self.ble_enabled == ble {
+            return;
+        }
+        self.wifi_enabled = wifi;
+        self.ble_enabled = ble;
+        self.scene.update(WIFI_TOGGLE, |w| {
+            if let Widget::Button(b) = w {
+                b.text = if wifi { "Wi-Fi ON" } else { "Wi-Fi OFF" };
+            }
+        });
+        self.scene.update(BLE_TOGGLE, |w| {
+            if let Widget::Button(b) = w {
+                b.text = if ble {
+                    "BLE ON - tap to turn OFF"
+                } else {
+                    "BLE OFF - tap to turn ON"
+                };
+            }
+        });
+    }
+    pub fn sync_settings(&mut self, brightness: u8, volume: u8, status: &str) {
+        if self.brightness != brightness || self.volume != volume {
+            self.brightness = brightness;
+            self.volume = volume;
+            if self.page == 6 || self.page == 7 {
+                let value = if self.page == 6 { brightness } else { volume };
+                self.scene.update(SETTING_SLIDER, |w| {
+                    if let Widget::Slider(v) = w {
+                        v.value = i32::from(value);
+                    }
+                });
+                self.invalidate(rect(24, 140, 312, 50));
+            }
+        }
+        if self.save_status.as_str() != status {
+            copy_text(&mut self.save_status, status);
+            self.invalidate(rect(12, 560, 336, 80));
         }
     }
     pub fn brightness_result(&mut self, requested: u8, ok: bool) {
@@ -405,6 +527,14 @@ impl Ui {
             }
             if status_changed {
                 self.invalidate(rect(12, 72, 336, 78));
+            }
+        }
+        if self.page == 10 {
+            if clock_changed {
+                self.invalidate(rect(12, 110, 336, 44));
+            }
+            if message_changed {
+                self.invalidate(rect(12, 310, 336, 70));
             }
         }
         if self.page == 1 && message_changed {
@@ -528,22 +658,24 @@ impl Ui {
                     }
                     ssid(&mut list, &n.ssid, Point::new(22, y + 10), ink())?;
                     let mut detail = String::<48>::new();
-                    write!(
-                        &mut detail,
-                        "{} dBm / {}",
-                        n.rssi,
-                        if n.secure { "secured" } else { "open" }
-                    )
-                    .ok();
+                    let tag = if n.connected {
+                        "CONNECTED"
+                    } else if n.saved {
+                        "SAVED"
+                    } else if n.secure {
+                        "secured"
+                    } else {
+                        "open"
+                    };
+                    if n.available {
+                        write!(&mut detail, "{} / {} dBm", tag, n.rssi).ok();
+                    } else {
+                        write!(&mut detail, "{} / not in scan", tag).ok();
+                    }
                     text(&mut list, &detail, Point::new(22, y + 40), accent())?;
                     list.fill_solid(&rect(16, y + 68, 328, 2), background())?;
                 }
-                text(
-                    target,
-                    "Wi-Fi credentials stay in RAM",
-                    Point::new(12, 604),
-                    accent(),
-                )?;
+                text(target, &self.save_status, Point::new(12, 604), accent())?;
             }
             2 | 5 => {
                 text(
@@ -556,14 +688,7 @@ impl Ui {
                     Point::new(100, 16),
                     ink(),
                 )?;
-                if self.page == 5 {
-                    text(
-                        target,
-                        "Non-connectable advertising",
-                        Point::new(12, 68),
-                        accent(),
-                    )?;
-                } else {
+                if self.page != 5 {
                     ssid(target, &self.selected, Point::new(12, 68), ink())?;
                 }
                 let mut mask = String::<64>::new();
@@ -584,7 +709,7 @@ impl Ui {
                 if self.page == 5 && !self.settings_message.is_empty() {
                     hint.push_str(&self.settings_message).ok();
                 } else if self.busy {
-                    hint.push_str("Wi-Fi busy. Please retry.").ok();
+                    hint.push_str("Wi-Fi off or request pending").ok();
                 } else {
                     write!(
                         &mut hint,
@@ -659,12 +784,7 @@ impl Ui {
             }
             4 => {
                 text(target, "SETTINGS", Point::new(105, 16), ink())?;
-                text(
-                    target,
-                    "Changes last until reboot",
-                    Point::new(20, 570),
-                    accent(),
-                )?;
+                text(target, &self.save_status, Point::new(20, 570), accent())?;
             }
             6 | 7 => {
                 text(
@@ -701,12 +821,55 @@ impl Ui {
                     Point::new(12, 350),
                     accent(),
                 )?;
+                text(target, &self.save_status, Point::new(20, 570), accent())?;
+            }
+            10 => {
+                text(target, "TIME SYNC", Point::new(105, 16), ink())?;
+                text(target, &self.clock, Point::new(24, 118), ink())?;
                 text(
                     target,
-                    "Changes last until reboot",
-                    Point::new(20, 570),
+                    "Beijing time (UTC+8)",
+                    Point::new(24, 158),
                     accent(),
                 )?;
+                text(target, &self.message, Point::new(12, 310), accent())?;
+                text(
+                    target,
+                    "Manual only; requires Wi-Fi",
+                    Point::new(12, 390),
+                    ink(),
+                )?;
+            }
+            9 => {
+                text(target, "SAVED NETWORK", Point::new(105, 16), ink())?;
+                ssid(target, &self.selected, Point::new(20, 90), ink())?;
+                text(
+                    target,
+                    "Connect without typing password",
+                    Point::new(20, 130),
+                    accent(),
+                )?;
+                if self.busy {
+                    text(
+                        target,
+                        "Wi-Fi off or request pending",
+                        Point::new(20, 460),
+                        accent(),
+                    )?;
+                }
+                text(target, &self.save_status, Point::new(20, 570), accent())?;
+            }
+            8 => {
+                text(target, "RESET SETTINGS", Point::new(105, 16), ink())?;
+                for (y, message) in [
+                    (130, "Forget Wi-Fi and password"),
+                    (170, "Reset Bluetooth name"),
+                    (210, "Reset brightness and volume"),
+                    (250, "Reset VIA keys and macros"),
+                ] {
+                    text(target, message, Point::new(20, y), ink())?;
+                }
+                text(target, &self.save_status, Point::new(20, 570), accent())?;
             }
             _ => {}
         }

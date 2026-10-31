@@ -8,12 +8,9 @@ GT911 触摸和 USB-A 数据口；运行它会替换当前 USB Audio 应用。�
 屏幕为 **2 列 × 4 行的 8 个大按键**，每键 312×198 像素。顶部 L0～L3
 直接切换四层，不占用可改键位置。按下高亮，松开释放，VIA 改键同步更新键名。
 
-| 层 | 从上到下、每行从左到右 |
-| --- | --- |
-| L0 | 复制 / 粘贴；撤销 / 重做；Esc / Enter；按住 L1 / Space |
-| L1 | F1 / F2；F3 / F4；音量加 / 音量减；透明 / 播放暂停 |
-| L2 | 宏 1～8，初始为空 |
-| L3 | 左 / 右；上 / 下；Home / End；Page Up / Page Down |
+所有层的默认键位均为 `KC_NO / 0x0000`，8 个宏也为空；空键只保留按钮外观，
+不显示 `NONE`，不向电脑发送按键。通过 VIA 分配功能后显示对应名称。
+已有 Flash 改键配置保持不变；新设备、VIA 重置或桌面“重置设置”后采用空白默认值。
 
 支持普通 HID 按键、Ctrl/Shift/Alt/GUI 组合、常用媒体键、MO/TG/TO/DF 层切换、
 透明键及 8 个 VIA 宏（合计 512 字节）。宏支持 US ANSI ASCII 文本、按下/松开/
@@ -142,3 +139,21 @@ HAL 的 commit 修改 LLI 源地址，仍需核实硬件锁存边界和缓冲释
 [VIA V3 变更](https://www.caniusevia.com/docs/post_v3_changes/)、
 [QMK Raw HID](https://docs.qmk.fm/features/rawhid)、
 [QMK VIA 协议实现](https://github.com/qmk/qmk_firmware/blob/master/quantum/via.c)。
+
+## VIA 网页宏缓冲末包兼容（2026-11-01）
+
+网页报 `Receiving incorrect response for command` 时，已在实机复现：
+`0E 01 DC 1C`（offset=476）正常，`0E 01 F8 1C`（offset=504、length=28）
+返回 `FF`。原因是固件拒绝了超过 512 字节宏缓冲末尾的读取，而
+[VIA 官方客户端 getMacroBytes](https://github.com/the-via/app/blob/main/src/utils/keyboard-api.ts)
+固定每次请求 28 字节，最后一包仍然如此。
+
+读取命令现在保持命令、偏移、长度原样回显，只复制有效范围，越界尾部补零；
+写入继续拒绝越界与超过 28 字节的请求，不做部分写入。未修改宏容量、布局 JSON、
+VID/PID，也无需为此重新制作 VIA 定义。现有简短探针没有覆盖读取完整宏缓冲的路径，
+因此只通过探针不代表网页初始化全部成功。
+
+修复版已烧录。手动硬件检查按网页流程连续读取 19 包，每包命令/偏移/长度回显
+均正确；末包返回 8 字节有效数据及 20 字节零填充。网页交互结果待用户确认。
+
+空白默认值实机验证：VIA 键位重置后读回全部 32 个键码均为 0；随后恢复原用户键位，未修改 Wi-Fi、其他设置或宏。

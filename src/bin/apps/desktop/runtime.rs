@@ -1,9 +1,11 @@
 // Shared Core 0 firmware: UI backends must not fork audio, radio, HID or storage logic.
 use core::cell::{Cell, RefCell};
+use embassy_embedded_hal::adapter::BlockingAsync;
 use embassy_executor::{Executor, Spawner};
 use embassy_futures::{join::join, yield_now};
 use embassy_usb::class::hid::{Config as HidConfig, HidReaderWriter, HidWriter, State};
 use embassy_usb::driver::{Endpoint, EndpointIn, EndpointOut};
+use embedded_storage_async::nor_flash::NorFlash;
 use esp_hal::{
     delay::Delay,
     gpio::{Level, Output, OutputConfig},
@@ -20,6 +22,11 @@ use esp_hal::{
     system::{CpuControl, Stack},
 };
 use esp_storage::FlashStorage;
+use sequential_storage::{
+    cache::Cache,
+    map::{MapConfig, MapStorage},
+};
+use waveshare_p4_eth::desktop_settings::{KV_END, KV_KEY, KV_START, LEGACY_RECORD, Settings};
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
     waveshare_p4_eth::diagnostic!(
@@ -76,34 +83,99 @@ fn main() -> ! {
 }
 #[embassy_executor::task]
 async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
-    let mut flash = FlashStorage::new(p.FLASH);
+    // Core 1 is either not started yet, or acknowledged FLASH_REQUEST and is
+    // executing park_for_flash entirely in SRAM with interrupts disabled.
+    // esp-storage's default checks CPU clock state, not this cooperative park.
+    let mut flash = unsafe { FlashStorage::new(p.FLASH).multicore_ignore() };
     let mut keymap = Keymap::default();
+    let mut settings = waveshare_p4_eth::desktop_settings::Settings::default();
     let mut generation = 0u32;
-    let mut active_slot = 1;
+    let mut restored = false;
     let mut table = [0; 0xc00];
-    let writable = flash.read(0x8000, &mut table).is_ok()
+    let table_valid = flash.read(0x8000, &mut table).is_ok();
+    let legacy_partition = table_valid
         && table.chunks_exact(32).any(|e| {
             e[..4] == [0xaa, 0x50, 1, 2]
                 && e[4..8] == 0xff0000u32.to_le_bytes()
                 && e[8..12] == 0x2000u32.to_le_bytes()
                 && &e[12..19] == b"kbdmap\0"
         });
-    if writable {
+    if legacy_partition {
         for slot in 0..2 {
-            let mut record = [0; waveshare_p4_eth::keyboard::RECORD];
+            let mut record = [0; LEGACY_RECORD];
             if flash.read(0xff0000 + slot * 4096, &mut record).is_ok() {
-                if let Some((map, seq)) = Keymap::restore(&record) {
-                    if generation == 0 || (seq.wrapping_sub(generation) as i32) > 0 {
+                if let Some((map, config, seq)) = Settings::restore_legacy(&record) {
+                    if !restored || (seq.wrapping_sub(generation) as i32) > 0 {
                         keymap = map;
+                        settings = config;
+                        restored = true;
                         generation = seq;
-                        active_slot = slot;
                     }
                 }
             }
         }
     }
+    let mut writable = table_valid
+        && table.chunks_exact(32).any(|e| {
+            e[..4] == [0xaa, 0x50, 1, 2]
+                && e[4..8] == KV_START.to_le_bytes()
+                && e[8..12] == (KV_END - KV_START).to_le_bytes()
+                && &e[12..21] == b"settings\0"
+        });
+    let mut kv = MapStorage::<u8, _, _>::new(
+        BlockingAsync::new(flash),
+        MapConfig::new(KV_START..KV_END),
+        Cache::new_uncached(),
+    );
+    let mut kv_buffer = [0u8; 2048];
+    if writable {
+        match kv.fetch_item::<&[u8]>(&mut kv_buffer, &KV_KEY).await {
+            Ok(Some(bytes)) => {
+                if let Some((map, config)) = Settings::decode_kv(bytes) {
+                    keymap = map;
+                    settings = config;
+                    restored = true;
+                } else {
+                    // Unknown schema/corruption must never trigger formatting.
+                    writable = false;
+                }
+            }
+            Ok(None) => {
+                // First boot migration happens before Core 1/audio start. The
+                // old partition remains readable until the new value is safe.
+                let mut encoded = [0u8; 2048];
+                if let Ok(bytes) =
+                    postcard::to_slice(&(2u8, &settings, &keymap.bytes[..]), &mut encoded)
+                {
+                    writable = kv
+                        .store_item(&mut kv_buffer, &KV_KEY, &&bytes[..])
+                        .await
+                        .is_ok()
+                        && matches!(kv.fetch_item::<&[u8]>(&mut kv_buffer, &KV_KEY).await, Ok(Some(value)) if value == bytes);
+                } else {
+                    writable = false;
+                }
+                encoded.fill(0);
+            }
+            Err(_) => {
+                writable = false;
+            }
+        }
+        kv_buffer.fill(0);
+    }
+    waveshare_p4_eth::diagnostic!(
+        "desktop: KV ready={} restored={} legacy_generation={} brightness={} volume={} wifi_saved={} ble_advertising={}",
+        writable,
+        restored,
+        generation,
+        settings.brightness,
+        settings.volume,
+        !settings.ssid.is_empty(),
+        settings.ble_advertising
+    );
+    desktop::PLAYBACK_VOLUME.store(settings.volume, core::sync::atomic::Ordering::Relaxed);
     critical_section::with(|cs| {
-        *desktop::SHARED.borrow(cs).borrow_mut() = Some(desktop::Shared::new(keymap))
+        *desktop::SHARED.borrow(cs).borrow_mut() = Some(desktop::Shared::new(keymap, settings))
     });
     let mut amplifier = Output::new(p.GPIO53, Level::Low, OutputConfig::default());
     let mut i2c = I2c::new(p.I2C1, I2cConfig::default())
@@ -134,10 +206,17 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     // 4096 bytes / (16 kHz * two 16-bit slots) = 64 ms of scheduling headroom.
     let tx_buffer = esp_hal::dma_tx_stream_buffer!(4096, 128);
     let (tx_descriptors, tx_bytes) = tx_buffer.split();
-    waveshare_p4_eth::diagnostic!("audio: TX SRAM data={:#x} descriptors={:#x} bytes={}",
-        tx_bytes.as_ptr() as usize, tx_descriptors.as_ptr() as usize, tx_bytes.len());
+    waveshare_p4_eth::diagnostic!(
+        "audio: TX SRAM data={:#x} descriptors={:#x} bytes={}",
+        tx_bytes.as_ptr() as usize,
+        tx_descriptors.as_ptr() as usize,
+        tx_bytes.len()
+    );
     let mut tx_buffer = esp_hal::dma::DmaTxStreamBuf::new(tx_descriptors, tx_bytes).unwrap();
-    tx_buffer.push_with(|bytes| { bytes.fill(0); bytes.len() });
+    tx_buffer.push_with(|bytes| {
+        bytes.fill(0);
+        bytes.len()
+    });
     let rx_buffer = esp_hal::dma_rx_stream_buffer!(4096, 128);
     let mut tx = tx.write(tx_buffer).unwrap();
     let mut rx = rx.read(rx_buffer).unwrap();
@@ -194,7 +273,8 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     let mut raw_state = State::new();
     let mut usb_status = UsbStatus { configured: false };
     let msc_bus = RefCell::new(None);
-    let driver = waveshare_p4_eth::driver::usb_msc::bridge::Driver::new(driver, &msc_link, &msc_bus);
+    let driver =
+        waveshare_p4_eth::driver::usb_msc::bridge::Driver::new(driver, &msc_link, &msc_bus);
     let mut builder = embassy_usb::Builder::new(
         driver,
         config,
@@ -239,7 +319,8 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         },
     )
     .split();
-    let mut msc = waveshare_p4_eth::driver::usb_msc::Msc::new(&mut builder, &mut msc_control, &msc_link);
+    let mut msc =
+        waveshare_p4_eth::driver::usb_msc::Msc::new(&mut builder, &mut msc_control, &msc_link);
     builder.handler(&mut usb_status);
     let mut usb = builder.build();
     // All futures run cooperatively on this one thread. RefCell borrows never
@@ -294,28 +375,57 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         }
     };
     let save = async {
-        let mut observed = 0;
-        let mut saved = 0;
+        let mut observed = (0, 0, false);
+        let mut saved = observed;
+        let mut save_failed = false;
         let mut changed = Instant::now();
         loop {
             yield_now().await;
-            let revision = desktop::with(|s| s.keymap.revision);
+            let revision =
+                desktop::with(|s| (s.keymap.revision, s.settings.revision, s.reset_requested));
             if revision != observed {
                 observed = revision;
+                save_failed = false;
                 changed = Instant::now();
             }
+            let status = if !writable {
+                "KV storage unavailable"
+            } else if revision == saved {
+                "Saved to flash"
+            } else if save_failed {
+                "Save failed; retrying"
+            } else {
+                "Save pending..."
+            };
+            desktop::with(|s| {
+                if s.view.save_status != status {
+                    s.view.save_status = status;
+                    s.view.revision = s.view.revision.wrapping_add(1);
+                }
+            });
             if !writable
                 || revision == saved
                 || changed.elapsed() < Duration::from_secs(2)
-                || state.playing.get()
-                || state.recording.get()
                 || desktop::with(|s| {
                     s.pressed != 0 || s.keymap.bytes[waveshare_p4_eth::keyboard::PAYLOAD - 1] != 0
                 })
             {
                 continue;
             }
-            let record = desktop::with(|s| s.keymap.record(generation.wrapping_add(1)));
+            let (config, map) = desktop::with(|s| {
+                if s.reset_requested {
+                    (Settings::default(), Keymap::default())
+                } else {
+                    (s.settings.clone(), s.keymap.clone())
+                }
+            });
+            let mut encoded = [0u8; 2048];
+            let Ok(record) = postcard::to_slice(&(2u8, &config, &map.bytes[..]), &mut encoded)
+            else {
+                log::warn!("desktop: KV serialization failed");
+                changed = Instant::now();
+                continue;
+            };
             desktop::FLASH_REQUEST.store(true, core::sync::atomic::Ordering::Release);
             let timeout = Instant::now();
             while !desktop::FLASH_PAUSED.load(core::sync::atomic::Ordering::Acquire)
@@ -323,19 +433,61 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
             {
                 yield_now().await;
             }
+            let mut ok = false;
+            let write_started = Instant::now();
             if desktop::FLASH_PAUSED.load(core::sync::atomic::Ordering::Acquire) {
-                let slot = 1 - active_slot;
-                let mut verify = [0; waveshare_p4_eth::keyboard::RECORD];
-                if flash.write(0xff0000 + slot * 4096, &record).is_ok()
-                    && flash.read(0xff0000 + slot * 4096, &mut verify).is_ok()
-                    && record == verify
-                {
-                    saved = revision;
-                    generation = generation.wrapping_add(1);
-                    active_slot = slot;
+                match kv.store_item(&mut kv_buffer, &KV_KEY, &&record[..]).await {
+                    Ok(()) => match kv.fetch_item::<&[u8]>(&mut kv_buffer, &KV_KEY).await {
+                        Ok(Some(value)) => {
+                            ok = value == record;
+                            if !ok {
+                                log::warn!("desktop: KV readback mismatch");
+                            }
+                        }
+                        Ok(None) => log::warn!("desktop: KV value missing after write"),
+                        Err(error) => log::warn!("desktop: KV readback error {:?}", error),
+                    },
+                    Err(error) => log::warn!("desktop: KV write error {:?}", error),
                 }
+                if ok && revision.2 {
+                    // Durable defaults first; then remove both legacy records
+                    // and historical KV pages, so reset clears old credentials.
+                    // If interrupted after erase, boot initializes defaults.
+                    ok = (!legacy_partition || kv.flash().erase(0xff0000, 0xff2000).await.is_ok())
+                        && kv.erase_all().await.is_ok()
+                        && kv
+                            .store_item(&mut kv_buffer, &KV_KEY, &&record[..])
+                            .await
+                            .is_ok()
+                        && matches!(kv.fetch_item::<&[u8]>(&mut kv_buffer, &KV_KEY).await, Ok(Some(value)) if value == record);
+                }
+                if ok {
+                    saved = revision;
+                }
+            } else {
+                log::warn!("desktop: KV waiting for screen core timed out");
             }
+            kv_buffer.fill(0);
+            encoded.fill(0);
             desktop::FLASH_REQUEST.store(false, core::sync::atomic::Ordering::Release);
+            if ok {
+                save_failed = false;
+                log::info!(
+                    "desktop: KV configuration saved reset={} write_us={}",
+                    revision.2,
+                    write_started.elapsed().as_micros()
+                );
+                if revision.2 {
+                    esp_hal::system::software_reset();
+                }
+            } else {
+                save_failed = true;
+                log::warn!("desktop: configuration save failed; will retry");
+                desktop::with(|s| {
+                    s.view.save_status = "Save failed; retrying";
+                    s.view.revision = s.view.revision.wrapping_add(1);
+                });
+            }
             changed = Instant::now();
         }
     };
@@ -467,11 +619,16 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
                 if active && primed {
                     amplifier.set_high();
                 }
-                let volume = desktop::PLAYBACK_VOLUME.load(core::sync::atomic::Ordering::Relaxed).min(100);
+                let volume = desktop::PLAYBACK_VOLUME
+                    .load(core::sync::atomic::Ordering::Relaxed)
+                    .min(100);
                 for frame in output[..available].as_chunks_mut::<4>().0 {
                     let sample = if active && primed {
                         sent += 1;
-                        q.pop_front().unwrap_or_else(|| { missing += 1; 0 })
+                        q.pop_front().unwrap_or_else(|| {
+                            missing += 1;
+                            0
+                        })
                     } else {
                         0i16
                     };
@@ -488,7 +645,10 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
                 let (sender, buffer) = tx.stop();
                 let (descriptors, bytes) = buffer.split();
                 let mut buffer = esp_hal::dma::DmaTxStreamBuf::new(descriptors, bytes).unwrap();
-                buffer.push_with(|bytes| { bytes.fill(0); bytes.len() });
+                buffer.push_with(|bytes| {
+                    bytes.fill(0);
+                    bytes.len()
+                });
                 tx = sender.write(buffer).unwrap();
                 primed = false;
             }
@@ -497,14 +657,25 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
             if stats_at.elapsed() >= Duration::from_secs(5) {
                 waveshare_p4_eth::diagnostic!(
                     "audio stats: rx={} out={} empty={} drop={} restart={} gap_us={}",
-                    received_samples.replace(0), sent, missing,
-                    discarded_samples.replace(0), restarts, max_gap_us);
-                waveshare_p4_eth::diagnostic!("audio detail: packets={} feedback={} work_us={}",
+                    received_samples.replace(0),
+                    sent,
+                    missing,
+                    discarded_samples.replace(0),
+                    restarts,
+                    max_gap_us
+                );
+                waveshare_p4_eth::diagnostic!(
+                    "audio detail: packets={} feedback={} work_us={}",
                     received_packets.replace(0),
                     feedback_sum.replace(0) / i64::from(feedback_count.replace(0).max(1)),
-                    max_work_us);
+                    max_work_us
+                );
                 stats_at = now;
-                sent = 0; missing = 0; restarts = 0; max_gap_us = 0; max_work_us = 0;
+                sent = 0;
+                missing = 0;
+                restarts = 0;
+                max_gap_us = 0;
+                max_work_us = 0;
             }
             max_work_us = max_work_us.max((Instant::now() - now).as_micros());
             yield_now().await;
@@ -522,7 +693,10 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
             audio,
             join(
                 playback,
-                join(capture, join(clock_feedback, join(hid, join(via, join(save, msc.run()))))),
+                join(
+                    capture,
+                    join(clock_feedback, join(hid, join(via, join(save, msc.run())))),
+                ),
             ),
         ),
     )
@@ -557,7 +731,9 @@ impl embassy_usb::Handler for UsbStatus {
                 s.view.usb = active;
                 s.view.revision += 1;
             }
-            if !active { s.reports.clear(); }
+            if !active {
+                s.reports.clear();
+            }
         });
         log::info!("desktop: USB suspended={} active={}", suspended, active);
     }

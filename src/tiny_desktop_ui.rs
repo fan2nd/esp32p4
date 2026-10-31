@@ -88,16 +88,92 @@ impl DrawTarget for Panel<'_> {
 }
 
 fn dispatch(ui: &mut Ui, event: Event, i2c: &mut I2c<'_, Blocking>) {
+    // Once reset is confirmed, freeze UI mutations until the durable reset
+    // record is verified and Core 0 restarts the device.
+    if desktop::with(|s| s.reset_requested) {
+        return;
+    }
     let Some(action) = ui.handle(event) else {
         return;
     };
     match action {
+        Action::SyncTime => desktop::with(|s| {
+            if matches!(s.command, None | Some(Command::Scan)) {
+                s.command = Some(Command::SyncTime);
+                s.view.message = "Time sync queued...";
+            } else {
+                s.view.message = "Request pending. Tap to retry";
+            }
+            s.view.revision += 1;
+        }),
+        Action::WifiEnabled(enabled) => desktop::with(|s| {
+            // A switch is the latest user intent, including during a scan.
+            s.command = Some(Command::Enable(enabled));
+            s.view.message = "Switching Wi-Fi...";
+            s.view.revision += 1;
+        }),
+        Action::BleEnabled(enabled) => desktop::with(|s| {
+            if s.view.bluetooth == "READY"
+                && s.ble_name_command.is_none()
+                && s.ble_enable_command.is_none()
+                && s.view.ble_name_status != "Applying..."
+            {
+                s.ble_enable_command = Some(enabled);
+                s.view.ble_name_status = "Applying...";
+                s.view.revision += 1;
+            }
+        }),
+        Action::ConnectSaved(ssid) => {
+            let accepted = desktop::with(|s| {
+                if !s.settings.wifi_enabled || !matches!(s.command, None | Some(Command::Scan)) {
+                    return false;
+                }
+                if let Some(profile) = s.settings.profiles.iter().find(|p| p.ssid == ssid) {
+                    s.command = Some(Command::Connect {
+                        ssid,
+                        password: profile.password.clone(),
+                    });
+                    s.view.message = if s.wifi_busy {
+                        "Connection queued..."
+                    } else {
+                        "Connecting..."
+                    };
+                    s.view.revision += 1;
+                    true
+                } else {
+                    false
+                }
+            });
+            ui.connect_result(accepted);
+        }
+        Action::Forget(ssid) => desktop::with(|s| {
+            if s.command.is_none() {
+                s.command = Some(Command::Forget(ssid));
+            }
+        }),
+        Action::Reset => desktop::with(|s| {
+            s.reset_requested = true;
+        }),
         Action::Brightness(value) => {
             let ok = display::set_brightness(i2c, value);
+            if ok {
+                desktop::with(|s| {
+                    if s.settings.brightness != value {
+                        s.settings.brightness = value;
+                        s.settings.revision = s.settings.revision.wrapping_add(1);
+                    }
+                });
+            }
             ui.brightness_result(value, ok);
         }
         Action::Volume(value) => {
             desktop::PLAYBACK_VOLUME.store(value.min(100), core::sync::atomic::Ordering::Relaxed);
+            desktop::with(|s| {
+                if s.settings.volume != value {
+                    s.settings.volume = value;
+                    s.settings.revision = s.settings.revision.wrapping_add(1);
+                }
+            });
             ui.set_setting_message("Playback volume applied");
         }
         Action::BleName(name) => {
@@ -105,7 +181,10 @@ fn dispatch(ui: &mut Ui, event: Event, i2c: &mut I2c<'_, Blocking>) {
                 if state.view.bluetooth != "READY" {
                     return "Bluetooth is not ready";
                 }
-                if state.ble_name_command.is_some() || state.view.ble_name_status == "Applying..." {
+                if state.ble_name_command.is_some()
+                    || state.ble_enable_command.is_some()
+                    || state.view.ble_name_status == "Applying..."
+                {
                     return "Bluetooth busy. Please retry.";
                 }
                 state.ble_name_command = Some(name);
@@ -117,24 +196,34 @@ fn dispatch(ui: &mut Ui, event: Event, i2c: &mut I2c<'_, Blocking>) {
         }
 
         Action::Scan => desktop::with(|state| {
-            if state.command.is_none() {
+            if state.command.is_none() && !state.wifi_busy && state.settings.wifi_enabled {
                 state.command = Some(Command::Scan);
             }
         }),
         Action::Disconnect => desktop::with(|state| {
-            if state.command.is_none() {
+            if state.command.is_none() && !state.wifi_busy && state.settings.wifi_enabled {
                 state.command = Some(Command::Disconnect);
             }
         }),
         Action::Connect { ssid, mut password } => {
             let accepted = desktop::with(|state| {
-                if state.command.is_some() {
+                // An in-flight scan owns the controller, not the command slot.
+                // Queue the connection behind it; do not force password re-entry.
+                if !state.settings.wifi_enabled
+                    || !matches!(state.command, None | Some(Command::Scan))
+                {
                     return false;
                 }
                 state.command = Some(Command::Connect {
                     ssid,
                     password: password.clone(),
                 });
+                state.view.message = if state.wifi_busy {
+                    "Connection queued..."
+                } else {
+                    "Connecting..."
+                };
+                state.view.revision += 1;
                 true
             });
             // This temporary request does not outlive dispatch; retained input is
@@ -177,6 +266,8 @@ pub fn run(
             ..display::DEFAULT_DPI_CONFIG
         },
     );
+    let brightness = desktop::with(|s| s.settings.brightness);
+    let _ = display::set_brightness(&mut i2c, brightness);
     unsafe {
         riscv::interrupt::enable();
     }
@@ -240,6 +331,10 @@ pub fn run(
             }
         }
         let (view, map) = desktop::with(|state| (state.view.clone(), state.keymap.clone()));
+        let (brightness, volume) = desktop::with(|s| (s.settings.brightness, s.settings.volume));
+        ui.sync_settings(brightness, volume, view.save_status);
+        let switches = desktop::with(|s| (s.settings.wifi_enabled, s.view.ble_advertising));
+        ui.sync_radio_switches(switches.0, switches.1);
         if let Some(report) = macros.update(ui.page() == 3, mask, &map, now) {
             desktop::with(|state| state.report(report));
         }
@@ -274,21 +369,44 @@ pub fn run(
             ui.sync_status(
                 &clock,
                 view.ip.is_some(),
-                view.bluetooth == "READY",
+                view.bluetooth == "READY" && view.ble_advertising,
                 view.usb,
                 &ip,
                 view.message,
             );
             if view.revision != revision {
-                let networks: heapless::Vec<Network, 64> = view
-                    .networks
-                    .iter()
-                    .map(|ap| Network {
-                        ssid: ap.ssid.clone(),
-                        rssi: ap.rssi,
-                        secure: ap.secure,
-                    })
-                    .collect();
+                // Copy public profile names only; credentials never enter the display core.
+                let networks = desktop::with(|s| {
+                    let mut networks = heapless::Vec::<Network, 64>::new();
+                    for profile in s.settings.profiles.iter().rev() {
+                        let ap = view.networks.iter().find(|ap| ap.ssid == profile.ssid);
+                        networks
+                            .push(Network {
+                                ssid: profile.ssid.clone(),
+                                rssi: ap.map_or(0, |a| a.rssi),
+                                secure: ap.is_none_or(|a| a.secure),
+                                saved: true,
+                                connected: view.ip.is_some() && s.settings.ssid == profile.ssid,
+                                available: ap.is_some(),
+                            })
+                            .ok();
+                    }
+                    for ap in &view.networks {
+                        if !networks.iter().any(|n| n.ssid == ap.ssid) {
+                            networks
+                                .push(Network {
+                                    ssid: ap.ssid.clone(),
+                                    rssi: ap.rssi,
+                                    secure: ap.secure,
+                                    saved: false,
+                                    connected: false,
+                                    available: true,
+                                })
+                                .ok();
+                        }
+                    }
+                    networks
+                });
                 ui.sync_networks(&networks);
             }
             revision = view.revision;

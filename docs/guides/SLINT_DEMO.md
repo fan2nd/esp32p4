@@ -17,7 +17,7 @@ Cargo.lock 包含其他可选平台的解析记录，不代表这些后端进入
 
 ## 文件与职责
 
-- `ui/demo.slint`：页面声明、滑条、模式选择、30 项列表和复位按钮。
+- `assets/ui/demo.slint`：页面声明、滑条、模式选择、30 项列表和复位按钮。
 - `src/bin/demos/slint_demo.rs`：分配内存、启动第二核、GT911 事件和换帧。
 - `src/slint_backend.rs`：与复合程序共用 Slint Platform、堆及 SRAM 行渲染实现。
 - `build.rs`：仅启用特性时，将页面、字体等资源编译并嵌入 Rust 固件。

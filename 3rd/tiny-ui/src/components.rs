@@ -180,25 +180,9 @@ impl ListView {
             .saturating_mul(self.items.len().min(u32::MAX as usize) as u32)
             .saturating_sub(self.base.bounds.size.height)
     }
-    /// Bounds for custom row overlays, excluding rounded edges and the scrollbar.
+    /// Bounds for custom row overlays, excluding the rounded perimeter and its scroll indicator.
     /// Row positions still use `base.bounds.top_left` and the clamped scroll offset.
     pub fn content_bounds(&self) -> Rectangle {
-        let inner = self.inner_bounds();
-        Rectangle::new(
-            inner.top_left,
-            Size::new(
-                inner.size.width.saturating_sub(
-                    if self.max_scroll() > 0 && inner.size.width >= 12 && inner.size.height > 0 {
-                        12
-                    } else {
-                        0
-                    },
-                ),
-                inner.size.height,
-            ),
-        )
-    }
-    pub(crate) fn inner_bounds(&self) -> Rectangle {
         let b = self.base.bounds;
         // Keep row fills/overlays inside the curved focus perimeter.
         let inset = self
@@ -207,7 +191,7 @@ impl ListView {
             .radius
             .div_ceil(2)
             .max(self.base.style.border_width)
-            .max(1)
+            .max(4)
             .min(b.size.width / 2)
             .min(b.size.height / 2);
         Rectangle::new(

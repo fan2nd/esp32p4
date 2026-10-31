@@ -33,7 +33,7 @@ Cargo 默认目标是 `riscv32imafc-unknown-none-elf`。项目禁止新增单元
 - `src/bin/verify/`：硬件验证入口。
 - `src/driver/`、`src/task/`：共享驱动与异步任务；`src/*.rs`：现有公共模块与板级配置。
 - [3rd/tiny-ui](3rd/tiny-ui/README.md)：可复用的无 alloc UI 框架；完整桌面页面在 `src/tiny_desktop_page.rs`，由 `desktop_tiny_ui` 使用；`rust_ui_demo` 保留为组件展示。
-- `ui/`、`assets/`：Slint 描述和图像/字体资源。
+- `assets/`：图像、字体和 `assets/ui/` 下的 Slint 页面。
 - `docs/`：使用指南、硬件说明、设计说明和官方资料，[从索引进入](docs/README.md)。
 - `tools/`：实机辅助脚本与资源生成工具，见 [工具说明](tools/README.md)。
 - `config/`：烧录配置；`3rd/esp-hal/`、`3rd/embassy-usb-synopsys-otg/`：必须保留的第三方源码及本地补丁。

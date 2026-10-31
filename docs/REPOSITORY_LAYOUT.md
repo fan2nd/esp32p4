@@ -1,7 +1,7 @@
 # 仓库结构与迁移
 
 本次整理调整目录、Cargo 入口注册和文档导航，并将 UI 框架与演示应用分离。
-保留所有应用、演示、硬件验证程序。`3rd/` 仅保留 tiny-ui 与两个实际使用的本地补丁依赖。
+保留所有应用、演示、硬件验证程序。`3rd/` 仅保留 tiny-ui 与三个实际使用的本地补丁依赖。
 本次另将 esp-hal 从 1.2.0 升级到 1.2.2，保留 P4 缓存/DMA 补丁；USB OTG 0.4.0 已是最新稳定发布，保留其全速补丁。
 
 ## 固件入口
@@ -34,8 +34,8 @@
 
 ## 保留的边界
 
-- `assets/` 与 `ui/` 仍供原有固件使用，未删除字体、图像或授权文件。
-- `3rd/esp-hal/`、`3rd/embassy-usb-synopsys-otg/` 包含实际依赖的本地补丁，不是可以随意清理的下载缓存。
+- `assets/`（含 `assets/ui/`）仍供原有固件使用，未删除字体、图像或授权文件。
+- `3rd/esp-hal/`、`3rd/embassy-usb-synopsys-otg/`、`3rd/embassy-net-esp-hosted/` 包含实际依赖的本地补丁，不是可以随意清理的下载缓存。
 - `3rd/tiny-ui/` 提供独立 UI 框架；根 bin `src/bin/demos/rust_ui_demo.rs` 直接依赖框架，页面模块在 `src/bin/demos/rust_ui_demo/page.rs`，不另设演示 crate。
 - 项目自有测试、`tests/` 与独立主机测试包已移除；实机辅助脚本放到 `tools/`，`src/bin/verify/` 保留板上验证固件。
 - `target/` 是忽略的本地构建产物，没有加入版本控制。

@@ -3,7 +3,7 @@ use std::{env, path::PathBuf};
 fn main() {
     #[cfg(feature = "slint-ui")]
     slint_build::compile_with_config(
-        "ui/main.slint",
+        "assets/ui/main.slint",
         slint_build::CompilerConfiguration::new()
             .with_style("fluent".into())
             .embed_resources(slint_build::EmbedResourcesKind::EmbedForSoftwareRenderer),

@@ -192,7 +192,7 @@ pub(crate) fn draw_widget<D: DrawTarget<Color = Rgb565>>(
         Widget::ListView(v) => {
             card(t, b, s, s.background)?;
             // Retain the input/row coordinate system while keeping all row ink
-            // clear of the curved perimeter and the scrollbar gutter.
+            // clear of the curved perimeter and its integrated scroll indicator.
             let content = v.content_bounds();
             let mut rows = t.clipped(&content);
             let row_bounds = Rectangle::new(
@@ -224,19 +224,25 @@ fn draw_scrollbar<D: DrawTarget<Color = Rgb565>>(
     list: &ListView,
 ) -> Result<(), D::Error> {
     let max_scroll = list.max_scroll();
-    let inner = list.inner_bounds();
-    if max_scroll == 0 || inner.size.width < 12 || inner.size.height == 0 {
+    let bounds = list.base.bounds;
+    let s = list.base.style;
+    let width = s.border_width.max(4).min(bounds.size.width / 2);
+    // Use the right outline itself as the track. Leave the rounded corners
+    // untouched and keep all ink inside the widget's damage rectangle.
+    let inset = s.radius.div_ceil(2).max(width).min(bounds.size.height / 2);
+    let height = bounds.size.height.saturating_sub(2 * inset);
+    if max_scroll == 0 || width == 0 || height == 0 {
         return Ok(());
     }
     let track = Rectangle::new(
         Point::new(
-            inner
+            bounds
                 .top_left
                 .x
-                .saturating_add((inner.size.width - 6).min(i32::MAX as u32) as i32),
-            inner.top_left.y,
+                .saturating_add((bounds.size.width - width).min(i32::MAX as u32) as i32),
+            bounds.top_left.y.saturating_add(inset as i32),
         ),
-        Size::new(4, inner.size.height),
+        Size::new(width, height),
     );
     let viewport = list.base.bounds.size.height as u64;
     let total = viewport + max_scroll as u64;
@@ -255,11 +261,14 @@ fn draw_scrollbar<D: DrawTarget<Color = Rgb565>>(
         ),
         Size::new(track.size.width, thumb_height),
     );
-    let mut target = target.clipped(&inner);
-    RoundedRectangle::with_equal_corners(track, Size::new(4, 4))
-        .into_styled(PrimitiveStyle::with_fill(list.base.style.border))
-        .draw(&mut target)?;
-    RoundedRectangle::with_equal_corners(thumb, Size::new(4, 4))
-        .into_styled(PrimitiveStyle::with_fill(list.base.style.accent))
+    // Blend toward the outline instead of drawing a separate vivid accent bar.
+    let color = Rgb565::new(
+        ((s.border.r() as u16 + s.accent.r() as u16) / 2) as u8,
+        ((s.border.g() as u16 + s.accent.g() as u16) / 2) as u8,
+        ((s.border.b() as u16 + s.accent.b() as u16) / 2) as u8,
+    );
+    let mut target = target.clipped(&bounds);
+    RoundedRectangle::with_equal_corners(thumb, Size::new(width, width))
+        .into_styled(PrimitiveStyle::with_fill(color))
         .draw(&mut target)
 }

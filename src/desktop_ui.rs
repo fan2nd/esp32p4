@@ -174,6 +174,8 @@ pub fn run(
     unsafe {
         riscv::interrupt::enable();
     }
+    let brightness = desktop::with(|s| s.settings.brightness);
+    let _ = display::set_brightness(&mut i2c, brightness);
     let window = MinimalSoftwareWindow::new(RepaintBufferType::SwappedBuffers);
     platform::set_platform(Box::new(Platform {
         window: window.clone(),
@@ -219,6 +221,11 @@ pub fn run(
             }
         });
     }
+    ui.on_sync_time(|| {
+        desktop::with(|s| {
+            if s.command.is_none() { s.command = Some(Command::SyncTime); }
+        });
+    });
     ui.on_scan(|| {
         desktop::with(|s| {
             if s.command.is_none() {
@@ -389,6 +396,7 @@ pub fn run(
         }
         old_mask = mask;
         if view.revision != revision {
+            ui.set_save_status(view.save_status.into());
             ui.set_wifi_ready(view.ip.is_some());
             ui.set_bluetooth_ready(view.bluetooth == "READY");
             ui.set_usb_ready(view.usb);

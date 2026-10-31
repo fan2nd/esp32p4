@@ -12,6 +12,9 @@ pub struct AccessPoint {
 }
 pub enum Command {
     Scan,
+    SyncTime,
+    Enable(bool),
+    Forget(String<32>),
     Connect {
         ssid: String<32>,
         password: String<64>,
@@ -20,6 +23,7 @@ pub enum Command {
 }
 #[derive(Clone)]
 pub struct View {
+    pub save_status: &'static str,
     pub ble_name: String<24>,
     pub ble_name_status: &'static str,
     pub ble_advertising: bool,
@@ -33,6 +37,10 @@ pub struct View {
     pub revision: u32,
 }
 pub struct Shared {
+    pub settings: crate::desktop_settings::Settings,
+    pub reset_requested: bool,
+    pub ble_enable_command: Option<bool>,
+    pub wifi_busy: bool,
     pub ble_name_command: Option<String<24>>,
     pub view: View,
     pub command: Option<Command>,
@@ -41,11 +49,14 @@ pub struct Shared {
     pub pressed: u8,
 }
 impl Shared {
-    pub fn new(keymap: Keymap) -> Self {
+    pub fn new(keymap: Keymap, settings: crate::desktop_settings::Settings) -> Self {
         Self {
             ble_name_command: None,
+            ble_enable_command: None,
+            wifi_busy: false,
             view: View {
-                ble_name: String::try_from("P4 Desktop").unwrap(),
+                save_status: "Saved to flash",
+                ble_name: settings.ble_name.clone(),
                 ble_name_status: "Not advertising",
                 ble_advertising: false,
                 wifi: "STARTING",
@@ -61,6 +72,8 @@ impl Shared {
             keymap,
             reports: Deque::new(),
             pressed: 0,
+            settings,
+            reset_requested: false,
         }
     }
     pub fn report(&mut self, report: [u8; 10]) {
@@ -99,5 +112,5 @@ pub fn with<R>(f: impl FnOnce(&mut Shared) -> R) -> R {
     critical_section::with(|cs| f(SHARED.borrow(cs).borrow_mut().as_mut().unwrap()))
 }
 
-/// Session-only playback attenuation. 100% is unity, never positive gain.
+/// Playback attenuation restored from settings. 100% is unity, never positive gain.
 pub static PLAYBACK_VOLUME: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(100);

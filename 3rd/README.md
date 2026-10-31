@@ -18,10 +18,12 @@ Rust UI 演示与 Slint 演示一样位于根 package：`src/bin/demos/rust_ui_d
 - [esp-hal 1.2.2](esp-hal/LOCAL_PATCHES.md)：保留 P4 缓存维护串行化、DMA 对齐/同步等补丁。
 - [embassy-usb-synopsys-otg 0.4.0](embassy-usb-synopsys-otg/PATCHES.md)：保留 USB FIFO、传输收尾与全速模式补丁。
 
-根 `Cargo.toml` 通过 `[patch.crates-io]` 引用它们，不是可直接删除的下载缓存。
+- [embassy-net-esp-hosted](embassy-net-esp-hosted/PATCHES.md)：固定上游版本并补充 MCU Wi-Fi 开关 RPC；根 package 用 path 直接引用。
+
+其余驱动在根 `Cargo.toml` 通过 `[patch.crates-io]` 引用它们，不是可直接删除的下载缓存。
 框架 tiny-ui 不依赖这些驱动；复用 UI 时不需要拷贝它们。
 
 ## 实机辅助工具
 
 项目自有主机测试包已移除。VIA 与 USB 音频辅助脚本位于 `tools/`，
-见 [工具说明](../tools/README.md)。`3rd/` 只保留以上三个实际使用的依赖。
+见 [工具说明](../tools/README.md)。`3rd/` 只保留以上四个实际使用的依赖。

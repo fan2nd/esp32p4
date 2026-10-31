@@ -14,29 +14,12 @@ pub struct Keymap {
 }
 impl Default for Keymap {
     fn default() -> Self {
-        let mut map = Self {
+        // KC_NO (0) leaves every key unassigned; VIA or factory reset uses the
+        // same defaults. Restoring an existing record still preserves remaps.
+        Self {
             bytes: [0; PAYLOAD],
             revision: 0,
-        };
-        let rows = [
-            [
-                0x0106, 0x0119, 0x011d, 0x011c, 0x0029, 0x0028, 0x5221, 0x002c,
-            ],
-            [0x003a, 0x003b, 0x003c, 0x003d, 0x00a9, 0x00aa, 1, 0x00ae],
-            [
-                0x7700, 0x7701, 0x7702, 0x7703, 0x7704, 0x7705, 0x7706, 0x7707,
-            ],
-            [
-                0x0050, 0x004f, 0x0052, 0x0051, 0x004a, 0x004d, 0x004b, 0x004e,
-            ],
-        ];
-        for (layer, keys) in rows.iter().enumerate() {
-            for (key, code) in keys.iter().enumerate() {
-                map.set(layer, key, *code);
-            }
         }
-        map.revision = 0;
-        map
     }
 }
 impl Keymap {
@@ -59,7 +42,8 @@ impl Keymap {
         self.revision = self.revision.wrapping_add(1);
     }
     /// VIA packets are always 32 bytes; numeric keycodes and buffer offsets are big-endian.
-    /// Invalid requests receive id_unhandled and never partially modify the keymap.
+    /// Reads beyond the logical buffer are zero-padded for VIA's fixed-size
+    /// final macro chunk. Invalid writes never partially modify the keymap.
     pub fn via(&mut self, p: &mut [u8; 32], uptime: u32, pressed: u8) {
         match p[0] {
             1 => p[1..3].copy_from_slice(&13u16.to_be_bytes()),
@@ -102,14 +86,23 @@ impl Keymap {
                 let count = p[3] as usize;
                 let macro_buffer = p[0] == 14 || p[0] == 15;
                 let size = if macro_buffer { MACRO_BYTES } else { MAP_BYTES };
-                if count > 28 || offset + count > size {
+                let reading = p[0] == 14 || p[0] == 18;
+                if count > 28 || (!reading && offset + count > size) {
                     p[0] = 0xff;
                     return;
                 }
-                let start = offset + if macro_buffer { MAP_BYTES } else { 0 };
-                if p[0] == 14 || p[0] == 18 {
-                    p[4..4 + count].copy_from_slice(&self.bytes[start..start + count]);
+                if reading {
+                    // usevia.app requests 28 bytes even at offset 504 of a
+                    // 512-byte macro buffer. Preserve the echoed request and
+                    // zero-fill the tail without reading into another region.
+                    let available = count.min(size.saturating_sub(offset));
+                    p[4..4 + count].fill(0);
+                    if available != 0 {
+                        let start = offset + if macro_buffer { MAP_BYTES } else { 0 };
+                        p[4..4 + available].copy_from_slice(&self.bytes[start..start + available]);
+                    }
                 } else {
+                    let start = offset + if macro_buffer { MAP_BYTES } else { 0 };
                     self.bytes[start..start + count].copy_from_slice(&p[4..4 + count]);
                     self.revision = self.revision.wrapping_add(1);
                 }
@@ -145,7 +138,7 @@ impl Keymap {
     }
 }
 
-fn crc(bytes: &[u8]) -> u32 {
+pub(crate) fn crc(bytes: &[u8]) -> u32 {
     let mut value = !0u32;
     for b in bytes {
         value ^= *b as u32;
@@ -204,7 +197,7 @@ pub fn label(code: u16) -> heapless::String<24> {
             let _ = write!(out, "MACRO {}", code - 0x7700 + 1);
         }
         0..=0xff => match code {
-            0 => out.push_str("NONE").unwrap(),
+            0 => {} // Unassigned keys have a blank face.
             1 => out.push_str("TRANS").unwrap(),
             4..=29 => {
                 let _ = out.push((b'A' + code as u8 - 4) as char);

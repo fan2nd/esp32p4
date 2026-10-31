@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-//! Pure Rust component-framework showcase matching ui/demo.slint geometry.
+//! Pure Rust component-framework showcase matching assets/ui/demo.slint geometry.
 use core::{
     convert::Infallible,
     sync::atomic::{AtomicU32, Ordering},

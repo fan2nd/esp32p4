@@ -5,6 +5,7 @@ export struct MacroKey { label: string, active: bool }
 export struct TypingKey { label: string, x: float, width: float, row: int, active: bool }
 
 export component DesktopWindow inherits Window {
+    in property <string> save-status;
     width: 360px; height: 640px;
     background: #e8f7ff;
     default-font-size: 17px;
@@ -26,6 +27,7 @@ export component DesktopWindow inherits Window {
     in property <[MacroKey]> macro-keys;
     callback navigate(int);
     callback scan();
+    callback sync-time();
     callback disconnect();
     callback choose-network(int);
     callback type-key(int);
@@ -46,9 +48,9 @@ export component DesktopWindow inherits Window {
         background: #e8f7ff;
         Text { x: 12px; y: 12px; text: root.clock; font-size: 44px; color: #182d44; }
         Button { x: 296px; y: 8px; width: 54px; height: 36px; text: "SET"; clicked => { root.navigate(1); } }
-        Image { x: 16px; y: 76px; width: 30px; height: 30px; source: @image-url("../assets/status-wifi.svg"); opacity: root.wifi-ready ? 1 : 0.25; }
-        Image { x: 66px; y: 76px; width: 30px; height: 30px; source: @image-url("../assets/status-bluetooth.svg"); opacity: root.bluetooth-ready ? 1 : 0.25; }
-        Image { x: 116px; y: 76px; width: 30px; height: 30px; source: @image-url("../assets/status-usb.svg"); opacity: root.usb-ready ? 1 : 0.25; }
+        Image { x: 16px; y: 76px; width: 30px; height: 30px; source: @image-url("../status-wifi.svg"); opacity: root.wifi-ready ? 1 : 0.25; }
+        Image { x: 66px; y: 76px; width: 30px; height: 30px; source: @image-url("../status-bluetooth.svg"); opacity: root.bluetooth-ready ? 1 : 0.25; }
+        Image { x: 116px; y: 76px; width: 30px; height: 30px; source: @image-url("../status-usb.svg"); opacity: root.usb-ready ? 1 : 0.25; }
         Text { x: 12px; y: 122px; text: root.ip-address; font-size: 15px; color: #182d44; }
         Image { x: 5px; y: 170px; width: 350px; height: 326px; source: root.whale; image-fit: contain; }
         Button { x: 70px; y: 566px; width: 220px; height: 50px; text: "KEYBOARD"; clicked => { root.navigate(3); } }
@@ -74,8 +76,9 @@ export component DesktopWindow inherits Window {
                 network-area := TouchArea { clicked => { root.choose-network(index); } }
             }
         }
-        Button { x: 12px; y: 490px; width: 336px; height: 44px; text: "DISCONNECT"; clicked => { root.disconnect(); } }
-        Text { x: 12px; y: 552px; text: "Wi-Fi credentials stay in RAM"; font-size: 13px; color: #267b9a; }
+        Button { x: 12px; y: 490px; width: 164px; height: 44px; text: "DISCONNECT"; clicked => { root.disconnect(); } }
+        Button { x: 184px; y: 490px; width: 164px; height: 44px; text: "SYNC TIME"; clicked => { root.sync-time(); } }
+        Text { x: 12px; y: 552px; text: root.save-status; font-size: 13px; color: #267b9a; }
     }
     if root.page == 2 : Rectangle {
         y: 52px; height: 588px;

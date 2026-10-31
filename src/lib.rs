@@ -7,6 +7,7 @@ pub mod board;
 pub mod diagnostics;
 pub mod keyboard;
 pub mod desktop;
+pub mod desktop_settings;
 pub mod desktop_protocol;
 pub mod desktop_controls;
 pub mod tiny_desktop_page;

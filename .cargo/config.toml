@@ -1,5 +1,5 @@
 [target.riscv32imafc-unknown-none-elf]
-runner = "espflash flash --monitor --chip esp32p4"
+runner = "espflash flash --monitor --chip esp32p4 --baud 921600"
 
 [env]
 EMBASSY_USB_MAX_INTERFACE_COUNT = "8"

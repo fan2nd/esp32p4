@@ -11,9 +11,10 @@ A reusable `#![no_std]`, allocation-free retained UI over `embedded-graphics`
   slices; labels use 96-byte UTF-8 inline storage and support `core::fmt::Write`.
 - Pointer capture lasts until release/cancel. Buttons click on release; slider
   ranges/steps use widened arithmetic; list dragging cancels taps and clamps
-  scrolling. Overflowing lists show a proportional right-hand scrollbar with an
-  18-pixel minimum thumb; it disappears when all rows fit. Custom row overlays
-  should clip to `ListView::content_bounds()` to preserve its scrollbar gutter
+  scrolling. Overflowing lists show a proportional indicator integrated into the
+  right outline, with an 18-pixel minimum thumb and a muted outline/accent blend.
+  It disappears when all rows fit. Custom row overlays
+  should clip to `ListView::content_bounds()` to preserve its edge indicator
   and rounded focus perimeter. Row positions/input coordinates are unchanged.
   Popups capture input, dismiss outside, and render above all widgets.
 - Keyboard previous/next moves focus; arrows adjust/select; activate operates

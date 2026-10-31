@@ -180,7 +180,7 @@ impl Ui {
             }
         });
     }
-    /// Match ui/demo.slint: reset volume and selection; preserve mode and scroll.
+    /// Match assets/ui/demo.slint: reset volume and selection; preserve mode and scroll.
     pub fn reset(&mut self) {
         self.set_volume(35);
         self.state.selected = None;

@@ -7,7 +7,7 @@
 | 可复用框架 | [`3rd/tiny-ui`](../../3rd/tiny-ui/README.md) | `Scene<N>`、组件、输入捕获/焦点、脏区绘制，无页面 ID/板级依赖 |
 | 页面模块 | `src/bin/demos/rust_ui_demo/page.rs` | 组合组件、业务状态、标签更新与复位策略 |
 | 固件适配 | `src/bin/demos/rust_ui_demo.rs` | GT911 输入、屏幕映射、PSRAM/DMA 双缓冲 |
-| 原版参考 | `ui/demo.slint` / `slint_demo` | 原 Slint 控件展示页面，不修改或移除 |
+| 原版参考 | `assets/ui/demo.slint` / `slint_demo` | 原 Slint 控件展示页面，不修改或移除 |
 
 框架与固件使用 `no_std`，页面模块不使用 `alloc`。框架只依赖 `embedded-graphics 0.8`，
 不依赖 HAL、Slint、第三方板级补丁或操作系统。它是第一版固定容量保留式组件框架，
@@ -17,7 +17,7 @@
 
 ![Rust UI 场景软件渲染参考](../images/rust-ui-demo.png)
 
-复刻的是 `ui/demo.slint` 的 **360×640 控件展示页**，不是 `ui/desktop.slint` 的完整桌面：
+复刻的是 `assets/ui/demo.slint` 的 **360×640 控件展示页**，不是 `assets/ui/desktop.slint` 的完整桌面：
 
 - 浅蓝背景、圆角白色音量区域、0–100 滑条，初始音量 35。
 - Mode 下拉框：Normal、Quiet、Music、Game，弹出菜单位于上层并捕获输入；点击外部只关闭，不穿透点击列表。

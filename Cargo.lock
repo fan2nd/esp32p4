@@ -604,6 +604,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cobs"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fa961b519f0b462e3a3b4a34b64d119eeaca1d59af726fe450bbba07a9fc0a1"
+dependencies = [
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "codespan-reporting"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1216,7 +1225,6 @@ dependencies = [
 [[package]]
 name = "embassy-net-esp-hosted"
 version = "0.3.0"
-source = "git+https://github.com/embassy-rs/embassy?rev=cd5f2d0e695e69fa474bda27710094d91bd93aa4#cd5f2d0e695e69fa474bda27710094d91bd93aa4"
 dependencies = [
  "aligned",
  "bt-hci-transport",
@@ -1724,6 +1732,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ef0e785f54e316f64a1e14a7a2f061a2ea0b038b284902ca71e1e1f5574cf47"
 dependencies = [
  "document-features",
+ "embedded-storage",
  "esp-hal",
  "esp-hal-procmacros",
  "esp-metadata-generated",
@@ -2362,6 +2371,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25ba4bd83f9415b58b4ed8dc5714c76e626a105be4646c02630ad730ad3b5aa4"
 dependencies = [
  "hash32",
+ "serde_core",
  "stable_deref_trait",
 ]
 
@@ -4144,6 +4154,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "postcard"
+version = "1.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6764c3b5dd454e283a30e6dfe78e9b31096d9e32036b5d1eaac7a6119ccb9a24"
+dependencies = [
+ "cobs",
+ "serde",
+]
+
+[[package]]
 name = "potential_utf"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4586,6 +4606,15 @@ name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
+
+[[package]]
+name = "sequential-storage"
+version = "8.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1550e4d0c7a6a54e2d7884309dc6bfe206d2d8884cb5498177fd936cb233616d"
+dependencies = [
+ "embedded-storage-async",
+]
 
 [[package]]
 name = "serde"
@@ -5636,6 +5665,7 @@ dependencies = [
  "aligned",
  "bt-hci-transport",
  "critical-section",
+ "embassy-embedded-hal",
  "embassy-executor",
  "embassy-futures 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "embassy-net",
@@ -5647,6 +5677,7 @@ dependencies = [
  "embedded-graphics",
  "embedded-io 0.7.1",
  "embedded-io-async 0.7.0",
+ "embedded-storage-async",
  "esp-bootloader-esp-idf",
  "esp-hal",
  "esp-p4-eth",
@@ -5656,9 +5687,12 @@ dependencies = [
  "linked_list_allocator",
  "log",
  "panic-halt",
+ "postcard",
  "riscv",
  "riscv-rt",
  "sdio",
+ "sequential-storage",
+ "serde",
  "slint",
  "slint-build",
  "static_cell",

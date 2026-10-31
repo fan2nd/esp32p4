@@ -182,9 +182,41 @@ async fn bluetooth(driver: embassy_net_esp_hosted::bluetooth::BtDriver<'_>) {
         };
         s.view.revision = s.view.revision.wrapping_add(1);
     });
-    // No automatic advertising on boot. Explicit UI Apply advertises only a
-    // public name, without a connection, pairing, GATT or Bluetooth HID service.
+    // Restore only previously enabled name advertising; no pairing/HID service.
+    desktop::with(|s| {
+        if s.settings.ble_advertising && s.ble_name_command.is_none() {
+            s.ble_name_command = Some(s.settings.ble_name.clone());
+        }
+    });
     loop {
+        if let Some(enabled) = desktop::with(|s| s.ble_enable_command.take()) {
+            if enabled && healthy {
+                desktop::with(|s| s.ble_name_command = Some(s.settings.ble_name.clone()));
+            } else {
+                let result = if healthy {
+                    hci_command(&driver, &mut buffer, 0x200a, &[0]).await
+                } else {
+                    Err(HciFailure::Unknown)
+                };
+                log::info!("desktop: BLE disable ok={}", result.is_ok());
+                desktop::with(|s| {
+                    if result.is_ok() {
+                        s.view.ble_advertising = false;
+                        s.view.ble_name_status = "Bluetooth advertising OFF";
+                        if !s.reset_requested && s.settings.ble_advertising {
+                            s.settings.ble_advertising = false;
+                            s.settings.revision = s.settings.revision.wrapping_add(1);
+                        }
+                    } else {
+                        s.view.ble_name_status = "Disable failed; retry/reboot";
+                    }
+                    s.view.revision = s.view.revision.wrapping_add(1);
+                });
+                if matches!(result, Err(HciFailure::Unknown)) {
+                    healthy = false;
+                }
+            }
+        }
         if let Some(name) = desktop::with(|s| s.ble_name_command.take()) {
             if !healthy {
                 desktop::with(|s| {
@@ -199,6 +231,14 @@ async fn bluetooth(driver: embassy_net_esp_hosted::bluetooth::BtDriver<'_>) {
             } else {
                 match apply_ble_name(&driver, &mut buffer, &name).await {
                     Ok(()) => desktop::with(|s| {
+                        // Confirm state only after LE Set Advertising Enable completes.
+                        if !s.reset_requested
+                            && (s.settings.ble_name != name || !s.settings.ble_advertising)
+                        {
+                            s.settings.ble_name = name.clone();
+                            s.settings.ble_advertising = true;
+                            s.settings.revision = s.settings.revision.wrapping_add(1);
+                        }
                         s.view.ble_name = name;
                         s.view.ble_advertising = true;
                         s.view.ble_name_status = "Advertising name";
@@ -290,11 +330,122 @@ pub async fn run(bus: Slot<'static, 1, Async>, reset: Output<'static>) {
     log::error!("desktop: C5 service stopped");
 }
 async fn wifi(control: &mut embassy_net_esp_hosted::Control<'_>, stack: Stack<'static>) {
-    let mut next_sync = 0u64;
+    let mut enabled = true; // Control::init starts Wi-Fi; restore the saved switch below.
+    let mut reconnect = true;
+    let mut next_retry = 0u64;
+    let mut connected_ssid = heapless::String::<32>::new();
+    desktop::with(|s| {
+        if !s.settings.wifi_enabled {
+            s.command = Some(Command::Enable(false));
+        }
+    });
     loop {
-        let command = desktop::with(|s| s.command.take());
+        let command = desktop::with(|s| {
+            let command = s.command.take().or_else(|| {
+                if enabled
+                    && reconnect
+                    && !stack.is_link_up()
+                    && Instant::now().as_secs() >= next_retry
+                    && !s.settings.ssid.is_empty()
+                {
+                    Some(Command::Connect {
+                        ssid: s.settings.ssid.clone(),
+                        password: s.settings.password.clone(),
+                    })
+                } else {
+                    None
+                }
+            });
+            s.wifi_busy = command.is_some();
+            command
+        });
         match command {
-            Some(Command::Scan) => {
+            Some(Command::SyncTime) => {
+                // Manual request only: connection and reconnect never trigger SNTP.
+                let ready = enabled && stack.is_link_up() && stack.config_v4().is_some();
+                desktop::with(|s| {
+                    s.view.message = if ready {
+                        "Synchronizing time..."
+                    } else {
+                        "Connect Wi-Fi first"
+                    };
+                    s.view.revision += 1;
+                });
+                if ready {
+                    let synced = sync_time(stack).await;
+                    desktop::with(|s| {
+                        if let Some(utc) = synced {
+                            s.view.utc = Some((utc, Instant::now().as_secs()));
+                            s.view.message = "Time synchronized";
+                        } else {
+                            s.view.message = "Time sync failed. Tap to retry";
+                        }
+                        s.view.revision += 1;
+                    });
+                }
+            }
+            Some(Command::Enable(value)) => {
+                let ok = matches!(
+                    with_timeout(Duration::from_secs(5), control.set_wifi_enabled(value)).await,
+                    Ok(Ok(()))
+                );
+                log::info!("desktop: Wi-Fi enable={} ok={}", value, ok);
+                if ok {
+                    enabled = value;
+                    reconnect = value;
+                    next_retry = 0;
+                    connected_ssid.clear();
+                    stack.set_config_v4(embassy_net::ConfigV4::Dhcp(Default::default()));
+                }
+                desktop::with(|s| {
+                    if ok {
+                        if !s.reset_requested && s.settings.wifi_enabled != value {
+                            s.settings.wifi_enabled = value;
+                            s.settings.revision = s.settings.revision.wrapping_add(1);
+                        }
+                        s.view.ip = None;
+                        s.view.wifi = if value { "OFFLINE" } else { "OFF" };
+                        s.view.message = if value {
+                            if s.settings.ssid.is_empty() {
+                                "Wi-Fi ON. Scan to connect"
+                            } else {
+                                "Wi-Fi ON. Reconnecting..."
+                            }
+                        } else {
+                            "Wi-Fi OFF. Passwords retained"
+                        };
+                    } else {
+                        s.view.message = "Wi-Fi switch failed. Retry";
+                    }
+                    s.view.revision += 1;
+                });
+            }
+            Some(Command::Forget(ssid)) => {
+                if connected_ssid == ssid {
+                    let _ = with_timeout(Duration::from_secs(3), control.disconnect()).await;
+                    connected_ssid.clear();
+                }
+                desktop::with(|s| {
+                    if !s.reset_requested {
+                        s.settings.profiles.retain(|p| p.ssid != ssid);
+                        if s.settings.ssid == ssid {
+                            s.settings.ssid.clear();
+                            unsafe {
+                                s.settings.password.as_bytes_mut().fill(0);
+                            }
+                            s.settings.password.clear();
+                            if let Some(p) = s.settings.profiles.last() {
+                                s.settings.ssid = p.ssid.clone();
+                                s.settings.password = p.password.clone();
+                            }
+                        }
+                        s.settings.revision = s.settings.revision.wrapping_add(1);
+                        s.view.message = "Network forgotten";
+                        s.view.revision += 1;
+                    }
+                });
+            }
+            Some(Command::Scan) if enabled => {
                 desktop::with(|s| {
                     s.view.message = "Scanning...";
                     s.view.revision += 1;
@@ -335,7 +486,8 @@ async fn wifi(control: &mut embassy_net_esp_hosted::Control<'_>, stack: Stack<'s
                     s.view.revision += 1;
                 });
             }
-            Some(Command::Connect { ssid, mut password }) => {
+            Some(Command::Connect { ssid, mut password }) if enabled => {
+                reconnect = true;
                 log::info!("desktop: Wi-Fi connect requested");
                 desktop::with(|s| {
                     s.view.wifi = "CONNECTING";
@@ -351,7 +503,38 @@ async fn wifi(control: &mut embassy_net_esp_hosted::Control<'_>, stack: Stack<'s
                     Ok(Ok(()))
                 );
                 log::info!("desktop: association result={}", connected);
-                // Password is never logged or written to flash.
+                // Save only accepted credentials; a failed attempt must not
+                // overwrite the last usable network. Never log the password.
+                if connected {
+                    desktop::with(|s| {
+                        if !s.reset_requested {
+                            let changed = s.settings.ssid != ssid
+                                || s.settings.password != password
+                                || !s
+                                    .settings
+                                    .profiles
+                                    .iter()
+                                    .any(|p| p.ssid == ssid && p.password == password);
+                            if changed {
+                                // Most recently used network is preferred at startup. Keep up to eight.
+                                s.settings.profiles.retain(|p| p.ssid != ssid);
+                                if s.settings.profiles.is_full() {
+                                    s.settings.profiles.remove(0);
+                                }
+                                s.settings
+                                    .profiles
+                                    .push(crate::desktop_settings::WifiProfile {
+                                        ssid: ssid.clone(),
+                                        password: password.clone(),
+                                    })
+                                    .ok();
+                                s.settings.ssid = ssid.clone();
+                                s.settings.password = password.clone();
+                                s.settings.revision = s.settings.revision.wrapping_add(1);
+                            }
+                        }
+                    });
+                }
                 unsafe {
                     password.as_bytes_mut().fill(0);
                 }
@@ -365,25 +548,42 @@ async fn wifi(control: &mut embassy_net_esp_hosted::Control<'_>, stack: Stack<'s
                 } else {
                     None
                 };
+                if connected {
+                    connected_ssid = ssid;
+                }
+                next_retry = Instant::now().as_secs() + 30;
                 log::info!("desktop: DHCP configured={}", ip.is_some());
                 desktop::with(|s| {
                     s.view.ip = ip;
-                    s.view.wifi = if ip.is_some() { "CONNECTED" } else { "OFFLINE" };
+                    s.view.wifi = if !enabled {
+                        "OFF"
+                    } else if ip.is_some() {
+                        "CONNECTED"
+                    } else {
+                        "OFFLINE"
+                    };
                     s.view.message = if ip.is_some() {
-                        "Connected. Syncing time..."
+                        "Connected"
                     } else {
                         "Connection failed"
                     };
                     s.view.revision += 1;
                 });
-                next_sync = 0;
             }
             Some(Command::Disconnect) => {
                 let _ = with_timeout(Duration::from_secs(3), control.disconnect()).await;
+                // Disconnect is temporary; only Forget removes stored credentials.
+                reconnect = false;
+                connected_ssid.clear();
+                desktop::with(|s| {
+                    s.view.message = "Disconnected. Passwords retained";
+                    s.view.revision += 1;
+                });
             }
-            None => {}
+            Some(_) | None => {}
         }
-        let ip = if stack.is_link_up() {
+        desktop::with(|s| s.wifi_busy = false);
+        let ip = if enabled && stack.is_link_up() {
             stack.config_v4().map(|c| c.address.address().octets())
         } else {
             None
@@ -391,24 +591,16 @@ async fn wifi(control: &mut embassy_net_esp_hosted::Control<'_>, stack: Stack<'s
         desktop::with(|s| {
             if s.view.ip != ip {
                 s.view.ip = ip;
-                s.view.wifi = if ip.is_some() { "CONNECTED" } else { "OFFLINE" };
+                s.view.wifi = if !enabled {
+                    "OFF"
+                } else if ip.is_some() {
+                    "CONNECTED"
+                } else {
+                    "OFFLINE"
+                };
                 s.view.revision += 1;
             }
         });
-        let now = Instant::now().as_secs();
-        if ip.is_some() && now >= next_sync {
-            let synced = sync_time(stack).await;
-            next_sync = Instant::now().as_secs() + if synced.is_some() { 3600 } else { 30 };
-            desktop::with(|s| {
-                if let Some(utc) = synced {
-                    s.view.utc = Some((utc, Instant::now().as_secs()));
-                    s.view.message = "Time synchronized";
-                } else {
-                    s.view.message = "Time sync failed. Retrying";
-                }
-                s.view.revision += 1;
-            });
-        }
         Timer::after_millis(50).await;
     }
 }
