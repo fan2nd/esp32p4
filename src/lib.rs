@@ -26,6 +26,7 @@ pub mod driver {
     pub mod hosted_v3;
     pub mod touch;
     pub mod usb_audio;
+    pub mod usb_msc;
 }
 
 /// Executor-facing long-lived application tasks.

@@ -1149,6 +1149,16 @@ impl<'d> embassy_usb_driver::Bus for Bus<'d> {
     fn endpoint_set_stalled(&mut self, ep_addr: EndpointAddress, stalled: bool) {
         trace!("endpoint_set_stalled ep={:?} en={}", ep_addr, stalled);
 
+        // USB 2.0 9.4.5: clearing a bulk/interrupt halt resets DATA0 and
+        // discards an interrupted transfer. A BOT reset uses disable/enable
+        // directly instead, preserving the PID and halt until CLEAR_FEATURE.
+        let reset_pid = !stalled && self.instance.state.ep_alloc_get(ep_addr.direction(), ep_addr.index())
+            .is_some_and(|ep| matches!(ep.ep_type, EndpointType::Bulk | EndpointType::Interrupt));
+        if reset_pid {
+            self.endpoint_set_enabled(ep_addr, false);
+            self.endpoint_set_enabled(ep_addr, true);
+        }
+
         let regs = self.instance.regs;
         let st = &self.instance.state;
 
@@ -1164,6 +1174,7 @@ impl<'d> embassy_usb_driver::Bus for Bus<'d> {
                     st.ep_states[ep_addr.index()].iso_enabled.store(false, Ordering::Release);
                     regs.doepctl(ep_addr.index()).modify(|w| {
                         w.set_stall(stalled);
+                        if reset_pid { w.set_sd0pid_sevnfrm(true); }
                     });
                 });
 
@@ -1173,6 +1184,7 @@ impl<'d> embassy_usb_driver::Bus for Bus<'d> {
                 critical_section::with(|_| {
                     regs.diepctl(ep_addr.index()).modify(|w| {
                         w.set_stall(stalled);
+                        if reset_pid { w.set_sd0pid_sevnfrm(true); }
                     });
                 });
 
@@ -1232,6 +1244,9 @@ impl<'d> embassy_usb_driver::Bus for Bus<'d> {
                     regs.doepctl(ep_addr.index()).modify(|w| {
                         w.set_usbaep(enabled);
                     });
+                    if !enabled {
+                        st.ep_states[ep_addr.index()].out_size.store(EP_OUT_BUFFER_EMPTY, Ordering::Release);
+                    }
 
                     // When re-enabling a non-EP0 OUT endpoint, prime it to receive a packet.
                     // Without this, the endpoint stays idle after reconnect and silently drops data.
@@ -1263,7 +1278,18 @@ impl<'d> embassy_usb_driver::Bus for Bus<'d> {
                         regs.diepctl(ep_addr.index()).modify(|w| {
                             w.set_snak(true); // set NAK
                             w.set_epdis(true);
-                        })
+                        });
+                        // EPENA may clear between the first check and EPDIS.
+                        // In that race no EPDISD interrupt is required. Bound
+                        // the handshake so a peripheral fault is explicit.
+                        for _ in 0..4096 {
+                            if !regs.diepctl(ep_addr.index()).read().epena()
+                                || regs.diepint(ep_addr.index()).read().epdisd() { break; }
+                            core::hint::spin_loop();
+                        }
+                        assert!(!regs.diepctl(ep_addr.index()).read().epena()
+                            || regs.diepint(ep_addr.index()).read().epdisd(), "USB IN disable timeout");
+                        regs.diepint(ep_addr.index()).write(|w| w.set_epdisd(true));
                     }
 
                     regs.diepctl(ep_addr.index()).modify(|w| {
