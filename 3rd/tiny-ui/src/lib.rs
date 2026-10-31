@@ -399,6 +399,21 @@ impl<const N: usize> Scene<N> {
             dismissing: false,
         }
     }
+    /// Remove all widgets in place while retaining viewport and background.
+    /// Replacing a large Scene with Scene::new creates a second inline array on
+    /// embedded stacks. Clearing slots avoids that temporary during page changes.
+    pub fn clear(&mut self) {
+        for widget in &mut self.widgets[..self.len] {
+            *widget = None;
+        }
+        self.len = 0;
+        self.capture = None;
+        self.focus = None;
+        self.key_pressed = None;
+        self.dismissing = false;
+        self.damage = Some(self.viewport);
+    }
+
     pub fn add(&mut self, widget: impl Into<Widget>) -> Result<(), AddError> {
         let w = widget.into();
         if self.get(w.base().id).is_some() {

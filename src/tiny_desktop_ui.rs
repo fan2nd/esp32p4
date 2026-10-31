@@ -43,13 +43,43 @@ impl DrawTarget for Panel<'_> {
             }
             let word =
                 (u16::from(color.b()) << 11) | (u16::from(color.g()) << 5) | u16::from(color.r());
-            let bytes = word.to_le_bytes();
+            let word = u32::from(word) * 0x0001_0001;
             let x = point.x as usize * 2;
             let y = point.y as usize * 2;
             for dy in 0..2 {
-                for dx in 0..2 {
-                    let offset = ((y + dy) * PANEL_WIDTH + x + dx) * 2;
-                    self.0[offset..offset + 2].copy_from_slice(&bytes);
+                // Match the Slint backend: an aligned SRAM/cache word store
+                // writes both physical pixels, avoiding PSRAM byte stores.
+                let offset = ((y + dy) * PANEL_WIDTH + x) * 2;
+                unsafe {
+                    self.0
+                        .as_mut_ptr()
+                        .add(offset)
+                        .cast::<u32>()
+                        .write_volatile(word);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn fill_solid(&mut self, area: &Rectangle, color: Rgb565) -> Result<(), Self::Error> {
+        let area = area.intersection(&self.bounding_box());
+        let Some(end) = area.bottom_right() else {
+            return Ok(());
+        };
+        let bgr = (u16::from(color.b()) << 11) | (u16::from(color.g()) << 5) | u16::from(color.r());
+        let word = u32::from(bgr) * 0x0001_0001;
+        // Backgrounds and filled controls use contiguous spans instead of
+        // sending every pixel through the general draw_iter clipping path.
+        for y in area.top_left.y as usize * 2..(end.y as usize + 1) * 2 {
+            let start = (y * PANEL_WIDTH + area.top_left.x as usize * 2) * 2;
+            for x in 0..area.size.width as usize {
+                unsafe {
+                    self.0
+                        .as_mut_ptr()
+                        .add(start + x * 4)
+                        .cast::<u32>()
+                        .write_volatile(word);
                 }
             }
         }

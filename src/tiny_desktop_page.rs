@@ -125,7 +125,9 @@ impl Ui {
         self.scene.add(b).unwrap();
     }
     fn rebuild(&mut self) {
-        self.scene = Scene::new(rect(0, 0, WIDTH, HEIGHT), background());
+        // Preserve the fixed storage: a replacement Scene temporarily duplicates
+        // its 72 inline widgets and overflows the 64 KiB core-1 startup stack.
+        self.scene.clear();
         if self.page != 0 {
             self.button(BACK, rect(10, 8, 74, 36), "BACK");
         }
