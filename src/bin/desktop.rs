@@ -188,7 +188,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     let mut keyboard_state = State::new();
     let mut consumer_state = State::new();
     let mut raw_state = State::new();
-    let mut usb_status = UsbStatus;
+    let mut usb_status = UsbStatus { configured: false };
     let mut builder = embassy_usb::Builder::new(
         driver,
         config,
@@ -519,7 +519,9 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     )
     .await;
 }
-struct UsbStatus;
+struct UsbStatus {
+    configured: bool,
+}
 impl embassy_usb::Handler for UsbStatus {
     fn enabled(&mut self, enabled: bool) {
         if !enabled {
@@ -530,11 +532,25 @@ impl embassy_usb::Handler for UsbStatus {
         self.configured(false);
     }
     fn configured(&mut self, on: bool) {
+        self.configured = on;
         desktop::with(|s| {
             s.view.usb = on;
             s.view.revision += 1;
             s.reports.clear();
         });
+    }
+    fn suspended(&mut self, suspended: bool) {
+        // Without VBUS sensing, cable removal may only produce Suspend.
+        // Keep configuration separately: Resume does not enumerate again.
+        let active = self.configured && !suspended;
+        desktop::with(|s| {
+            if s.view.usb != active {
+                s.view.usb = active;
+                s.view.revision += 1;
+            }
+            if !active { s.reports.clear(); }
+        });
+        log::info!("desktop: USB suspended={} active={}", suspended, active);
     }
 }
 const KEYBOARD_DESC: &[u8] = &[

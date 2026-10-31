@@ -26,6 +26,10 @@ for the sequence, delays, panel commands, and clock/timing parameters.
 
 ## Flash
 
+`slint_demo` runs a slider, mode dropdown and draggable 30-item list on core 1.
+Build with `cargo build --release --bin slint_demo --features slint-ui`.
+See [Slint setup and measured partial redraw behavior](doc/SLINT_DEMO.md).
+
 `display_core1` runs display initialization, drawing and VDMA on the second core,
 while core 0 prints a heartbeat. See [the standalone dual-core display demo](doc/DISPLAY_CORE1.md).
 
@@ -67,7 +71,10 @@ Adjust the static IPv4 settings in `src/board.rs` if your LAN does not use `192.
 
 The integrated `desktop` firmware combines USB keyboard/microphone/speaker,
 C5 Wi-Fi and Bluetooth initialization, and a whale-girl home screen. Display and
-touch run on the second core. See [desktop setup and validation status](doc/DESKTOP.md).
+touch run on the second core using Slint. Build with
+`cargo build --release --bin desktop --features slint-ui`.
+The home screen opens a single-layer macropad; settings use a scrolling Wi-Fi list
+and PC-style password keyboard. See [desktop setup and validation status](doc/DESKTOP.md).
 
 `keyboard` provides eight large touch keys (2 columns × 4 rows), four layers,
 USB HID keyboard/media controls and VIA remapping. See [setup, VIA definition and

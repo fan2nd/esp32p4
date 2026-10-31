@@ -1,0 +1,112 @@
+import { Button, ListView } from "std-widgets.slint";
+
+export struct Network { name: image, detail: string }
+export struct MacroKey { label: string, active: bool }
+export struct TypingKey { label: string, x: float, width: float, row: int, active: bool }
+
+export component DesktopWindow inherits Window {
+    width: 360px; height: 640px;
+    background: #e8f7ff;
+    default-font-size: 17px;
+    // Page 0=home, 1=settings, 2=password, 3=macropad.
+    in-out property <int> page: 0;
+    in property <string> clock: "--:--:--";
+    in property <bool> wifi-ready;
+    in property <bool> bluetooth-ready;
+    in property <bool> usb-ready;
+    in property <string> usb-status;
+    in property <string> ip-address;
+    in property <string> message;
+    in property <image> whale;
+    in property <[Network]> networks;
+    in property <image> selected-ssid;
+    in property <string> password-mask;
+    in property <string> password-hint;
+    in property <[TypingKey]> typing-keys;
+    in property <[MacroKey]> macro-keys;
+    callback navigate(int);
+    callback scan();
+    callback disconnect();
+    callback choose-network(int);
+    callback type-key(int);
+    callback connect();
+
+    // The same geometry supplies layout and raw multi-contact hit testing.
+    public pure function key-x(index: int) -> length { return 16px + mod(index, 2) * 172px; }
+    public pure function key-y(index: int) -> length { return 138px + floor(index / 2) * 110px; }
+    public pure function key-at(px: float, py: float) -> int {
+        if root.page != 3 || px < 16 || py < 138 { return -1; }
+        let col = floor((px - 16) / 172);
+        let row = floor((py - 138) / 110);
+        if col > 1 || row > 3 || px >= (16 + col * 172 + 156) || py >= (138 + row * 110 + 99) { return -1; }
+        return row * 2 + col;
+    }
+
+    if root.page == 0 : Rectangle {
+        background: #e8f7ff;
+        Text { x: 12px; y: 12px; text: root.clock; font-size: 44px; color: #182d44; }
+        Button { x: 296px; y: 8px; width: 54px; height: 36px; text: "SET"; clicked => { root.navigate(1); } }
+        Image { x: 16px; y: 76px; width: 30px; height: 30px; source: @image-url("../assets/status-wifi.svg"); opacity: root.wifi-ready ? 1 : 0.25; }
+        Image { x: 66px; y: 76px; width: 30px; height: 30px; source: @image-url("../assets/status-bluetooth.svg"); opacity: root.bluetooth-ready ? 1 : 0.25; }
+        Image { x: 116px; y: 76px; width: 30px; height: 30px; source: @image-url("../assets/status-usb.svg"); opacity: root.usb-ready ? 1 : 0.25; }
+        Text { x: 12px; y: 122px; text: root.ip-address; font-size: 15px; color: #182d44; }
+        Image { x: 5px; y: 170px; width: 350px; height: 326px; source: root.whale; image-fit: contain; }
+        Button { x: 70px; y: 566px; width: 220px; height: 50px; text: "KEYBOARD"; clicked => { root.navigate(3); } }
+    }
+    if root.page != 0 : Button {
+        x: 10px; y: 8px; width: 74px; height: 36px; text: "BACK";
+        clicked => { root.navigate(root.page == 2 ? 1 : 0); }
+    }
+    if root.page == 1 : Rectangle {
+        y: 52px; height: 588px;
+        Text { x: 105px; y: -36px; text: "SETTINGS"; color: #182d44; }
+        Button { x: 12px; y: 8px; width: 336px; height: 44px; text: "SCAN WIFI"; clicked => { root.scan(); } }
+        Text { x: 12px; y: 66px; width: 336px; text: root.message; font-size: 14px; color: #267b9a; }
+        ListView {
+            x: 12px; y: 98px; width: 336px; height: 374px;
+            mouse-drag-pan-enabled: true;
+            for ap[index] in root.networks : Rectangle {
+                width: 336px; height: 70px;
+                background: network-area.pressed ? #c1eafa : white;
+                Image { x: 10px; y: 10px; width: 310px; height: 20px; source: ap.name; image-fit: contain; horizontal-alignment: left; }
+                Text { x: 10px; y: 40px; text: ap.detail; color: #267b9a; font-size: 14px; }
+                Rectangle { y: 68px; height: 2px; background: #e8f7ff; }
+                network-area := TouchArea { clicked => { root.choose-network(index); } }
+            }
+        }
+        Button { x: 12px; y: 490px; width: 336px; height: 44px; text: "DISCONNECT"; clicked => { root.disconnect(); } }
+        Text { x: 12px; y: 552px; text: "Wi-Fi credentials stay in RAM"; font-size: 13px; color: #267b9a; }
+    }
+    if root.page == 2 : Rectangle {
+        y: 52px; height: 588px;
+        Text { x: 100px; y: -36px; text: "WIFI PASSWORD"; color: #182d44; }
+        Image { x: 12px; y: 16px; width: 336px; height: 24px; source: root.selected-ssid; image-fit: contain; horizontal-alignment: left; }
+        Rectangle {
+            x: 12px; y: 60px; width: 336px; height: 52px; background: white; border-radius: 8px;
+            Text { x: 10px; width: parent.width - 20px; height: parent.height; vertical-alignment: center; overflow: elide; text: root.password-mask; color: #182d44; }
+        }
+        Text { x: 12px; y: 126px; width: 336px; text: root.password-hint; font-size: 13px; color: #267b9a; }
+        for key[index] in root.typing-keys : Rectangle {
+            x: 8px + key.x * 23.7px; y: 186px + key.row * 54px;
+            width: key.width * 23.7px - 2px; height: 48px; border-radius: 4px;
+            background: key.active || typing-area.pressed ? #86cde8 : white;
+            Text { text: key.label; width: parent.width; height: parent.height;
+                horizontal-alignment: center; vertical-alignment: center;
+                font-size: key.width > 1 ? 11px : 15px; color: #182d44; }
+            typing-area := TouchArea { clicked => { root.type-key(index); } }
+        }
+        Button { x: 12px; y: 490px; width: 336px; height: 50px; text: "CONNECT"; clicked => { root.connect(); } }
+    }
+    if root.page == 3 : Rectangle {
+        Text { x: 100px; y: 17px; text: "USB MACROPAD"; color: #182d44; }
+        Text { x: 16px; y: 76px; text: "Touch keys / VIA remapping"; color: #267b9a; font-size: 15px; }
+        for key[index] in root.macro-keys : Rectangle {
+            x: root.key-x(index); y: root.key-y(index); width: 156px; height: 99px;
+            background: key.active ? #2691b5 : #cde4ef; border-radius: 8px;
+            Text { text: key.label; width: parent.width; height: parent.height;
+                horizontal-alignment: center; vertical-alignment: center;
+                color: key.active ? white : #182d44; font-size: 20px; }
+        }
+        Text { x: 16px; y: 600px; text: root.usb-status; font-size: 13px; color: #267b9a; }
+    }
+}

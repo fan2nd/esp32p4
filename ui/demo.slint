@@ -1,0 +1,58 @@
+import { Slider, ComboBox, ListView, Button } from "std-widgets.slint";
+
+// This standalone page exercises pointer dragging, popup capture and scrolling.
+export component Demo inherits Window {
+    width: 360px;
+    height: 640px;
+    background: #e8f7ff;
+    default-font-size: 18px;
+    in-out property <float> volume: 35;
+    in-out property <int> selected: -1;
+    callback volume-changed(float);
+    callback item-selected(int);
+
+    Text { x: 20px; y: 18px; text: "SLINT / ESP32-P4"; color: #182d44; font-size: 25px; font-weight: 700; }
+    Text { x: 20px; y: 56px; text: "Core 1  |  RGB565  |  Touch UI"; color: #267b9a; font-size: 15px; }
+
+    Rectangle {
+        x: 16px; y: 94px; width: 328px; height: 120px;
+        background: white; border-radius: 12px;
+        Text { x: 16px; y: 12px; text: "Volume: " + round(root.volume) + "%"; color: #182d44; }
+        Slider {
+            x: 16px; y: 56px; width: parent.width - 32px; height: 48px;
+            minimum: 0; maximum: 100; value <=> root.volume;
+            changed(value) => { root.volume-changed(value); }
+        }
+    }
+    Text { x: 20px; y: 230px; text: "Mode"; color: #182d44; }
+    ComboBox {
+        x: 110px; y: 220px; width: 230px; height: 48px;
+        model: ["Normal", "Quiet", "Music", "Game"];
+    }
+    Text {
+        x: 20px; y: 282px; color: #182d44;
+        text: root.selected < 0 ? "Swipe the list, then select" : "Selected: Item " + (root.selected + 1);
+        font-size: 17px;
+    }
+    Rectangle {
+        x: 16px; y: 314px; width: 328px; height: 252px;
+        background: white; border-radius: 10px; clip: true;
+        ListView {
+            width: parent.width; height: parent.height;
+            // Bare-metal Pointer events use the left button for the touch contact.
+            mouse-drag-pan-enabled: true;
+            for index in 30 : Rectangle {
+                width: 328px; height: 60px;
+                background: root.selected == index ? #c1eafa : (mod(index, 2) == 0 ? #ffffff : #f0f7fa);
+                Text { x: 16px; y: 16px; text: "Item " + (index + 1); color: #182d44; }
+                TouchArea {
+                    clicked => { root.selected = index; root.item-selected(index); }
+                }
+            }
+        }
+    }
+    Button {
+        x: 16px; y: 582px; width: 328px; height: 44px; text: "Reset controls";
+        clicked => { root.volume = 35; root.selected = -1; }
+    }
+}

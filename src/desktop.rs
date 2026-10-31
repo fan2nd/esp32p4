@@ -4,7 +4,7 @@ use core::cell::RefCell;
 use critical_section::Mutex;
 use heapless::{Deque, String, Vec};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct AccessPoint {
     pub ssid: String<32>,
     pub rssi: i32,

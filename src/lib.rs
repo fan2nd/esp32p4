@@ -1,11 +1,18 @@
 #![no_std]
 
+#[cfg(feature = "slint-ui")]
+extern crate alloc;
+
 pub mod board;
 pub mod diagnostics;
 pub mod keyboard;
 pub mod desktop;
 pub mod desktop_protocol;
+#[cfg(feature = "slint-ui")]
 pub mod desktop_ui;
+#[cfg(feature = "slint-ui")]
+pub mod slint_backend;
+pub mod password_keyboard;
 
 /// Hardware-facing drivers: panel, codec, and touch controller.
 pub mod driver {

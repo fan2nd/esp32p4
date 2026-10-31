@@ -10,13 +10,22 @@
 
 ## 界面
 
-主页显示现有鲸鱼娘插画；顶部显示时间、Wi-Fi、蓝牙和 USB 状态。
+2026-10-31 起界面改用 Slint，运行在第二核；页面声明位于 `ui/desktop.slint`。
+主页显示现有鲸鱼娘插画；顶部显示放大的时间，以及 Wi-Fi、蓝牙和 USB 图标。
+图标高亮表示已连接/就绪，暗色表示未就绪。蓝牙就绪只表示控制器初始化成功，不代表已配对。
+USB 图标表示已配置且未挂起。驱动当前未启用 VBUS 检测，不能可靠区分物理拔线和主机挂起，
+因此非活动状态使用 `USB inactive`。状态处理保留枚举结果，挂起时变暗、恢复时重新点亮；
+复位或取消配置清除枚举结果。此前只处理 configured/reset，遗漏 suspended 回调，导致状态可能停留在连接状态。
+2026-10-31 已烧录验证：拔掉 USB-A 数据线后日志出现 `USB suspended=true active=false`，
+插回后出现总线复位及 `USB configured=true`；用户确认图标熄灭/点亮正常。两次拔插记录与反馈一致。
 Wi-Fi 获取到 DHCP 地址后显示 IP，断开后清除 IP。小 `SET` 按钮进入设置。
 
-- `SCAN WIFI`：读取最多 64 条结果，按信号强度排序、按 SSID 去重，6 条一页。
-- 点击网络进入密码页，支持大小写、数字、符号、空格和删除，密码遮罩显示。
+- `SCAN WIFI`：读取最多 64 条结果，按信号强度排序、按 SSID 去重，使用可拖动的滚动列表。
+- 点击网络进入密码页，采用 PC QWERTY 错位排列，含数字、Shift、Caps、符号、空格及退格，密码遮罩显示。
 - `CONNECT`：连接后等待 DHCP，取得 IP 后发起 SNTP 校时；`DISCON` 断开。
-- `KEYBOARD`：进入原 8 键宏键盘，保留 4 层和 VIA 改键；`BACK` 返回。
+- 主页 `KEYBOARD`：进入 8 键单层宏键盘，使用 VIA 第 0 层；`BACK` 返回主页。
+  旧配置和 VIA 的四组存储格式保留兼容，但屏幕不提供切层、不执行层切换键码。
+  若原第 0 层含 MO/TO/TG 等切层键，可在 VIA 第 0 层将其改成需要的普通键或宏。
 - Wi-Fi 名称支持 ASCII 和基本 CJK 汉字；其他 Unicode 字形未完整覆盖。
 
 凭据仅在 RAM 中用于连接，不写 Flash、不记录密码日志；当前未实现开机自动重连。
@@ -36,6 +45,17 @@ ES8311 在 Core 0 启动时配置完毕后，I2C1 所有权转交 Core 1；两�
 同一 I2C 外设。跨核状态和命令使用临界区保护，锁内不绘制、不访问 I2C、不 await。
 Core 1 使用独立 64 KiB 栈。显示为 720×1280、RGB565 双缓冲、约 31 Hz；
 DSI 线上仍为 RGB888，沿用已验证的 565 通道顺序和帧边界切换策略。
+Slint 的 4 MiB 堆位于 PSRAM 双帧缓冲之后；USB/I2S 缓冲仍在内部 SRAM。
+软件渲染采用 `SwappedBuffers` 脏区域跟踪与 360 像素 SRAM 行缓冲，保留现有缓存互斥。
+热点变化时才更新列表模型，状态或时间变化不会重建列表；中文 SSID 使用已有授权位图字库生成透明图像。
+
+2026-10-31 迁移版已编译全部启用 Slint 的例程并烧录；启动日志确认 Slint/GT911、
+USB 复合设备、Wi-Fi 和 Bluetooth READY，VIA 读取通过。密码键盘新增三项测试，
+连同原键盘四项测试共七项通过。初始音频统计未见补零、丢包或 DMA 重启；
+随后通过屏幕发起 Wi-Fi 连接，日志确认 association、DHCP 和 SNTP 均成功；
+多次扫描（原始记录 40–62 条）与连接期间，观测到的音频窗口仍为补零/丢包/重启均零。
+屏幕视觉及主观触摸、音频体验仍以用户实机反馈为准。
+CPU 使用率当前未实现，统计方案见 [CPU_USAGE.md](CPU_USAGE.md)。
 
 当前 Hosted Git 版本使用 xarxa 的 owned-packet 驱动接口，与 embassy-net 0.9
 的 token 接口不同。`driver/hosted_net.rs` 提供有界 12 包静态池与实际接口转换，
@@ -48,6 +68,15 @@ DSI 线上仍为 RGB888，沿用已验证的 565 通道顺序和帧边界切换�
 USB 使用已验证的 HS PHY 全速模式；音频保持 mono PCM16、16 kHz、DAC 0 dB。
 
 VIA 使用 `assets/p4-desktop-via.json`，不能用独立键盘 `4013` 的定义替代。
+当前实验设备尚未收录到官方定义库，首次使用官方 VIA 网页需要在 Design 页加载这份 JSON。
+这份文件描述矩阵、按键位置和设备标识，不是从设备导出的改键备份，也不会替代固件里的键位保存。
+官方说明 Design 页载入的草稿定义可跨会话保留，因此同一浏览器通常只需加载一次；
+换浏览器、清理站点数据或使用无痕会话时可能需要重新加载。
+若定义被 VIA 官方键盘库收录并发布，网页可自动获取匹配定义，无需用户手工加载。
+也可以维护预置本设备定义的自有 WebHID 配置网页，但仅把 JSON 放进固件或项目 GitHub 仓库，
+不会让官方 VIA 网站自动读取它。自动加载布局与浏览器的 USB/HID 授权是两件事。
+参考：[VIA 定义规范](https://www.caniusevia.com/docs/specification/)、
+[草稿定义跨会话保存](https://caniusevia.com/docs/whats_new/)。
 分区仍使用 `partitions-keyboard.csv`，可读取原键盘配置。修改配置后空闲约 2 秒
 保存；播放/录音期间延迟保存。写 Flash 前等待 Core 1 进入内部 RAM 停驻函数，
 禁止其同时从 Flash 取指，完成后恢复。双核写 Flash 的显示/音频影响待实机验证。
@@ -59,7 +88,7 @@ VIA 使用 `assets/p4-desktop-via.json`，不能用独立键盘 `4013` 的定义
 ## 构建与验证
 
 ```powershell
-cargo build --release --bin desktop
+cargo build --release --bin desktop --features slint-ui
 espflash flash --port COM6 --baud 921600 --chip esp32p4 --partition-table partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/desktop
 python tests/keyboard/via_probe.py --pid 0x4014 --roundtrip
 python tests/usb_audio/playback.py --device "P4 Desktop"

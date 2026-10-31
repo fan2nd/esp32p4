@@ -3,6 +3,6 @@ name = "keyboard-host-tests"
 version = "0.1.0"
 edition = "2024"
 [lib]
-path = "../../src/keyboard.rs"
+path = "lib.rs"
 [dependencies]
 heapless = "=0.9.3"
