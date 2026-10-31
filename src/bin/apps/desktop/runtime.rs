@@ -22,6 +22,7 @@ use esp_hal::{
 use esp_storage::FlashStorage;
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
+    esp_println::println!("DIRECT PANIC: {}", info);
     waveshare_p4_eth::diagnostic!(
         "desktop PANIC core={:?}: {}",
         esp_hal::system::Cpu::current(),
@@ -172,10 +173,12 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     // The same J2 HS controller/PHY remains in use, limited to 12 Mbit/s.
     usb_config.force_full_speed = true;
     let driver = Driver::new(Usb::new_hs(p.USB_HS), &mut ep_buffer, usb_config);
+    let msc_link = waveshare_p4_eth::driver::usb_msc::bridge::Link::new();
+    let mut msc_control = waveshare_p4_eth::driver::usb_msc::Control::new(&msc_link);
     // Laboratory VID/PID only. Replace with an allocated pair for distribution.
     let mut config = embassy_usb::Config::new(0xcafe, 0x4014);
     config.manufacturer = Some("P4 Lab");
-    config.product = Some("P4 Desktop Keyboard + Audio");
+    config.product = Some("P4 Desktop Keyboard + Audio + VIA Drive");
     config.serial_number = Some("P4-DESKTOP-001");
     config.self_powered = true;
     config.max_power = 0;
@@ -187,6 +190,8 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     let mut consumer_state = State::new();
     let mut raw_state = State::new();
     let mut usb_status = UsbStatus { configured: false };
+    let msc_bus = RefCell::new(None);
+    let driver = waveshare_p4_eth::driver::usb_msc::bridge::Driver::new(driver, &msc_link, &msc_bus);
     let mut builder = embassy_usb::Builder::new(
         driver,
         config,
@@ -231,6 +236,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         },
     )
     .split();
+    let mut msc = waveshare_p4_eth::driver::usb_msc::Msc::new(&mut builder, &mut msc_control, &msc_link);
     builder.handler(&mut usb_status);
     let mut usb = builder.build();
     // All futures run cooperatively on this one thread. RefCell borrows never
@@ -513,7 +519,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
             audio,
             join(
                 playback,
-                join(capture, join(clock_feedback, join(hid, join(via, save)))),
+                join(capture, join(clock_feedback, join(hid, join(via, join(save, msc.run()))))),
             ),
         ),
     )

@@ -20,6 +20,11 @@ Licensed under MIT OR Apache-2.0; license texts are included.
    so global NAK can take effect. This prevents pending EPDIS on interface reopen.
 5. Add opt-in `Config::force_full_speed` (default false) for a high-speed PHY.
    The UAC1 example selects it; the enumeration probe retains high-speed mode.
+6. Clear bulk/interrupt halt by cancelling the interrupted transfer and resetting
+   DATA0. Disabling OUT discards its buffered packet; disabling IN waits for
+   EPDISD or EPENA clearing with a bounded handshake before flushing its FIFO.
+   Endpoint disable/enable alone preserves PID and halt, allowing the desktop's
+   MSC BOT reset to preserve both until the host sends CLEAR_FEATURE.
 
 No C code is built or linked. The receive FIFO accounting was cross-checked
 against the explanation in the upstream TinyUSB DWC2 driver (reference only):
