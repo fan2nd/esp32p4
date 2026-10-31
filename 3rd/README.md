@@ -3,10 +3,12 @@
 根目录保留当前 P4 固件 package；其余独立 crate 都放在这里。`3rd` 是统一的存放位置，
 不表示每个 crate 都来自第三方。
 
-## 自有组件与示例
+## 自有组件
 
 - [tiny-ui](tiny-ui/README.md)：无 alloc、no_std 的通用组件框架；只依赖 embedded-graphics。
-- [ui-demo](ui-demo/README.md)：依赖 tiny-ui 的页面组合和主机预览；P4 入口在根 crate。
+
+Rust UI 演示与 Slint 演示一样位于根 package：`src/bin/demos/rust_ui_demo.rs`
+直接依赖 tiny-ui，页面模块为 `src/bin/demos/rust_ui_demo/page.rs`，不另建演示 crate。
 
 ## 有本地补丁的第三方驱动
 

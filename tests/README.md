@@ -1,6 +1,6 @@
 # 测试入口
 
-根固件以外的所有独立 crate 都位于 `3rd/`，本目录仅保留测试导航。主机测试不是固件烧录程序；根目录 Cargo 配置默认交叉编译，因此必须指定主机 target。以下命令从仓库根目录执行。
+根固件以外的所有独立 crate 都位于 `3rd/`，本目录保留测试导航及 `rust_ui_demo.rs` 页面测试，不额外建立演示 crate。主机测试不是固件烧录程序；根目录 Cargo 配置默认交叉编译，因此必须指定主机 target。以下命令从仓库根目录执行。
 
 ```sh
 HOST="$(rustc -vV | sed -n 's/^host: //p')"
@@ -8,7 +8,7 @@ for suite in desktop-protocol-tests keyboard-host-tests hosted-v3-tests usb-audi
   cargo test --locked --manifest-path "3rd/$suite/Cargo.toml" --target "$HOST"
 done
 cargo test --locked --manifest-path 3rd/tiny-ui/Cargo.toml --target "$HOST"
-cargo test --locked --manifest-path 3rd/ui-demo/Cargo.toml --target "$HOST"
+python3 tools/test_rust_ui_demo.py
 ```
 
 - [desktop-protocol-tests](../3rd/desktop-protocol-tests/)：桌面协议与 Hosted 网络。
@@ -17,6 +17,8 @@ cargo test --locked --manifest-path 3rd/ui-demo/Cargo.toml --target "$HOST"
 - [usb-audio-host-tests](../3rd/usb-audio-host-tests/)：USB 音频协议；`capture.py` / `playback.py` 需要音频设备。
 - [via_probe.py](../3rd/keyboard-host-tests/via_probe.py)：VIA 实机辅助探测，不能替代主机单元测试。
 - [tiny-ui](../3rd/tiny-ui/)：可复用无 alloc UI 框架。
-- [ui-demo](../3rd/ui-demo/)：演示应用、主机预览及集成测试。
+- [rust_ui_demo.rs](rust_ui_demo.rs)：直接测试根 bin 的 `src/bin/demos/rust_ui_demo/page.rs`，保留 11 项页面集成测试；运行 [test_rust_ui_demo.py](../tools/test_rust_ui_demo.py)，无需独立演示 crate。
+
+`tiny-ui` 包含 17 项框架测试；页面测试脚本使用主机目标执行，不烧录固件，也不提供 HTTP/浏览器预览。
 
 根 package 的 `verify_*` 是板上固件，在 `src/bin/verify/`；编译不等于已执行硬件验证。不要在不了解接线时运行烧录或实机脚本。

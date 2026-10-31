@@ -1,15 +1,14 @@
-#![no_std]
 //! Showcase page composed from the independent `tiny-ui` crate.
 //!
 //! This module owns demo IDs, labels, state, and reset policy. The component crate
 //! knows nothing about volume, modes, this screen size, or the ESP32-P4.
 use core::fmt::Write;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
+pub use tiny_ui::Event;
 use tiny_ui::{
     ActionKind, Alignment, Button, ComboBox, FontSize, InlineText, Label, ListView, Panel, Scene,
     Slider, Style, Widget, WidgetId,
 };
-pub use tiny_ui::{Event, Key};
 
 pub const WIDTH: u32 = 360;
 pub const HEIGHT: u32 = 640;
@@ -143,12 +142,15 @@ impl Ui {
             },
         }
     }
+    #[cfg(test)]
     pub fn state(&self) -> State {
         self.state
     }
+    #[cfg(test)]
     pub fn focus(&self) -> Option<WidgetId> {
         self.scene.focused()
     }
+    #[cfg(test)]
     pub fn scroll_offset(&self) -> u32 {
         match self.scene.get(ITEMS) {
             Some(Widget::ListView(v)) => v.scroll,

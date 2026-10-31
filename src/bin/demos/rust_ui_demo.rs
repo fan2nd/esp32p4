@@ -17,7 +17,9 @@ use esp_hal::{
 };
 use riscv_rt::entry;
 use static_cell::StaticCell;
-use tiny_ui_demo::{Action, Event, Ui};
+#[path = "rust_ui_demo/page.rs"]
+mod page;
+use page::{Action, Event, Ui};
 use waveshare_p4_eth::driver::{display, touch::Gt911};
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -41,7 +43,7 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
 struct Panel<'a>(&'a mut [u8]);
 impl OriginDimensions for Panel<'_> {
     fn size(&self) -> Size {
-        Size::new(tiny_ui_demo::WIDTH, tiny_ui_demo::HEIGHT)
+        Size::new(page::WIDTH, page::HEIGHT)
     }
 }
 impl DrawTarget for Panel<'_> {

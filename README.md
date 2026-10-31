@@ -23,7 +23,7 @@ cargo build --release --locked --bin rust_ui_demo
 cargo run --release --locked --bin rust_ui_demo
 ```
 
-Cargo 默认目标是 `riscv32imafc-unknown-none-elf`。主机测试和电脑预览必须显式指定主机 target，见 [测试说明](tests/README.md) 和 [UI 主机预览](3rd/ui-demo/README.md)。
+Cargo 默认目标是 `riscv32imafc-unknown-none-elf`。主机测试必须使用主机 target，见 [测试说明](tests/README.md)。Rust UI 与 Slint 一样直接作为根 package 的 bin 运行，不另设演示 crate 或浏览器预览。
 
 ## 目录
 
@@ -31,10 +31,10 @@ Cargo 默认目标是 `riscv32imafc-unknown-none-elf`。主机测试和电脑预
 - `src/bin/demos/`：聚焦单一能力的演示入口。
 - `src/bin/verify/`：硬件验证入口。
 - `src/driver/`、`src/task/`：共享驱动与异步任务；`src/*.rs`：现有公共模块与板级配置。
-- [3rd/tiny-ui](3rd/tiny-ui/README.md)：可复用的无 alloc UI 框架；[3rd/ui-demo](3rd/ui-demo/README.md)：演示应用及主机预览。
+- [3rd/tiny-ui](3rd/tiny-ui/README.md)：可复用的无 alloc UI 框架；Rust UI 页面在 `src/bin/demos/rust_ui_demo/page.rs`，由 `rust_ui_demo` bin 直接使用。
 - `ui/`、`assets/`：Slint 描述和图像/字体资源。
 - `docs/`：使用指南、硬件说明、历史排障和官方资料，[从索引进入](docs/README.md)。
-- `3rd/*-tests/`：独立主机测试包及实机辅助脚本；`tests/`：测试导航；`tools/`：资源生成工具。
+- `3rd/*-tests/`：独立主机测试包及实机辅助脚本；`tests/`：测试导航和 Rust UI 页面测试；`tools/`：主机测试脚本及资源生成工具。
 - `config/`：烧录配置；`3rd/esp-hal/`、`3rd/embassy-usb-synopsys-otg/`：必须保留的第三方源码及本地补丁。
 
 所有原有 `--bin` 名称保留。第三方 HAL 已升级至 1.2.2，并保留 P4 缓存/DMA 本地补丁；功能未删减。迁移路径和验证记录见 [仓库结构](docs/REPOSITORY_LAYOUT.md)。

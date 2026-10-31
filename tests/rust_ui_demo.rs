@@ -1,5 +1,8 @@
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
-use tiny_ui_demo::{Action, Event, Key, Ui, HEIGHT, ITEMS, MODE, RESET, VOLUME, WIDTH};
+#[path = "../src/bin/demos/rust_ui_demo/page.rs"]
+mod page;
+use page::{Action, Event, HEIGHT, ITEMS, MODE, RESET, Ui, VOLUME, WIDTH};
+use tiny_ui::Key;
 #[derive(Clone)]
 struct Frame(Vec<Rgb565>);
 impl Frame {
