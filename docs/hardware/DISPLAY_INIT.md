@@ -1,7 +1,7 @@
 # ESP32-P4 点亮 MIPI 屏幕：当前实现总结
 
 整理日期：2026-10-24。以当前 `src/driver/display.rs`、
-`src/bin/main.rs`、`src/bin/verify_display.rs` 和本机 esp-hal 1.2.0
+`src/bin/apps/main.rs`、`src/bin/verify/verify_display.rs` 和本机 esp-hal 1.2.0
 源码为依据；本次仅核对代码与记录，没有重新烧录或进行硬件测量。
 
 ## 屏幕和关键参数

@@ -29,7 +29,7 @@ Unicode 宏或全部扩展 QMK 键码。未知键码会保留并显示十六进�
 
 ```powershell
 cargo build --release --bin keyboard --features keyboard-low-refresh
-espflash flash --port COM6 --chip esp32p4 --partition-table partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/keyboard
+espflash flash --port COM6 --chip esp32p4 --partition-table config/partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/keyboard
 ```
 
 必须带该分区表，不能直接使用默认 `cargo run` runner 烧录后期待掉电保存。

@@ -143,7 +143,7 @@ Get-Command espflash -All | Select-Object Source
 
 - User reports HFP 52 displays correctly; current `src/driver/display.rs` uses 52.
 - The HFP 40/52 arithmetic and its relation to spatial corruption are explained
-  in [DISPLAY_INIT.md](DISPLAY_INIT.md). The observations and proposed test below
+  in [DISPLAY_INIT.md](../hardware/DISPLAY_INIT.md). The observations and proposed test below
   are historical stages preceding that successful HFP 52 report; the complete
   A/B/A test and hardware timing readback are not recorded as completed.
 - Four-lane feasibility checked against ESP-IDF:

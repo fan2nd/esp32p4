@@ -8,7 +8,7 @@
 
 ```powershell
 cargo build --release --bin slint_demo --features slint-ui
-espflash flash --port COM6 --baud 921600 --chip esp32p4 --partition-table partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/slint_demo
+espflash flash --port COM6 --baud 921600 --chip esp32p4 --partition-table config/partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/slint_demo
 ```
 
 `slint-ui` 为可选特性；`slint_demo` 和迁移后的 `desktop` 都需要它，其他独立例程不需要。已验证上述构建和不带特性的
@@ -19,7 +19,7 @@ Cargo.lock 包含其他可选平台的解析记录，不代表这些后端进入
 ## 文件与职责
 
 - `ui/demo.slint`：页面声明、滑条、模式选择、30 项列表和复位按钮。
-- `src/bin/slint_demo.rs`：分配内存、启动第二核、GT911 事件和换帧。
+- `src/bin/demos/slint_demo.rs`：分配内存、启动第二核、GT911 事件和换帧。
 - `src/slint_backend.rs`：与复合程序共用 Slint Platform、堆及 SRAM 行渲染实现。
 - `build.rs`：仅启用特性时，将页面、字体等资源编译并嵌入 Rust 固件。
 
@@ -66,4 +66,4 @@ Cargo.lock 包含其他可选平台的解析记录，不代表这些后端进入
 固件 app 大小 939,328 字节。实测没有把绘制、缓存写回和 VSYNC 等待混算。
 
 本轮未改变原复合程序的显示或音频实现。后续集成应单独验证持续音频播放下的滚动、弹出和切页。
-Slint 授权与框架取舍见 [选型记录](UI_FRAMEWORK_OPTIONS.md)。
+Slint 授权与框架取舍见 [选型记录](../notes/UI_FRAMEWORK_OPTIONS.md)。

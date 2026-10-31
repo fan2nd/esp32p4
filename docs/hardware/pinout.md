@@ -5,7 +5,7 @@
 
 整理依据：
 
-- 本地文件：[ESP32-P4-ETH 官方原理图及位图](../官方资料/ESP32-P4-ETH-官方原理图及位图.pdf)。
+- 本地文件：[ESP32-P4-ETH 官方原理图及位图](../reference/ESP32-P4-ETH-官方原理图及位图.pdf)。
 - 微雪 wiki：`https://www.waveshare.com/wiki/ESP32-P4-ETH`。
 - 微雪产品页：`https://www.waveshare.com/esp32-p4-eth.htm`。
 

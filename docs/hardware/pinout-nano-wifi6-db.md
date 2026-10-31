@@ -8,7 +8,7 @@
 - [微雪官方文档：ESP32-P4-NANO-WIFI6-DB](https://docs.waveshare.net/ESP32-P4-NANO-WIFI6-DB/)。
 - [官方原理图](https://github.com/waveshareteam/ESP32-P4-NANO-WIFI6-DB/blob/main/hardware/schematics/ESP32-P4-NANO-WIFI6-DB.pdf)：本次下载并检查第 3 页电路图，核对排针、DSI/CSI、USB-UART 和复位电路。
 - [官方仓库硬件指南](https://github.com/waveshareteam/ESP32-P4-NANO-WIFI6-DB/blob/main/docs/en/hw-reference/user-guide-esp32-p4-nano-wifi6-db.md)。
-- 旧板对比依据本工程既有 `doc/pinout.md`，不是把旧板连接器编号套到新板。
+- 旧板对比依据本工程既有 `docs/hardware/pinout.md`，不是把旧板连接器编号套到新板。
 
 除明确写出 C5 外，GPIO 编号均为 ESP32-P4 侧。DSI、CSI 和 USB HS
 差分信号属于专用引脚，不是任意 GPIO；电源网络也不是 GPIO。
@@ -193,7 +193,7 @@ USB1P1 复用信号混为一谈。
 
 新板和旧板均为 CH343。新板原理图证明存在自动下载电路，但不能单凭器件型号
 断言两板的复位瞬态一致。当前 Windows/espflash 自动复位实测及兼容处理见
-[DISPLAY_DEBUG.md](DISPLAY_DEBUG.md)，尚未确认最终电气根因。
+[DISPLAY_DEBUG.md](../notes/DISPLAY_DEBUG.md)，尚未确认最终电气根因。
 
 ## 按键、晶振和电源指示
 

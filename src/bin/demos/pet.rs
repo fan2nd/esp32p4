@@ -15,12 +15,12 @@ const SPRITE_WIDTH: usize = 700;
 const SPRITE_HEIGHT: usize = 653;
 // RGB888 artwork is precomposited against the screen background.
 const GREETING: &[u8; SPRITE_WIDTH * SPRITE_HEIGHT * 3] =
-    include_bytes!("../../assets/whale-girl-wave-large.rgb");
+    include_bytes!("../../../assets/whale-girl-wave-large.rgb");
 const BACKGROUND: [u8; 3] = [232, 247, 255];
 const BUBBLE_WIDTH: usize = 440;
 const BUBBLE_HEIGHT: usize = 125;
 const BUBBLE: &[u8; BUBBLE_WIDTH * BUBBLE_HEIGHT * 3] =
-    include_bytes!("../../assets/pet-bubble.rgb");
+    include_bytes!("../../../assets/pet-bubble.rgb");
 
 #[entry]
 fn main() -> ! {

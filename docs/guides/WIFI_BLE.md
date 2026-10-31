@@ -1,6 +1,6 @@
 # Wi-Fi + BLE 独立例程
 
-`src/bin/wifi_ble.rs` 仅启动 ESP32-P4 主核、C5 SDIO 和 Embassy 任务。
+`src/bin/demos/wifi_ble.rs` 仅启动 ESP32-P4 主核、C5 SDIO 和 Embassy 任务。
 不初始化屏幕、触摸、PSRAM、副核、USB、音频或以太网。P4 应用全部为 Rust，
 沿用 C5 上已有的 ESP-Hosted MCU 3.0.10 固件。
 
@@ -17,7 +17,7 @@
 
 ```powershell
 cargo build --release --bin wifi_ble
-espflash flash --port COM6 --baud 921600 --chip esp32p4 --partition-table partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/wifi_ble
+espflash flash --port COM6 --baud 921600 --chip esp32p4 --partition-table config/partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/wifi_ble
 ```
 
 SDIO 引脚：CLK18、CMD19、D0～D3 为 14/15/16/17；C5 RESET54，20 MHz。

@@ -155,7 +155,7 @@ python tests/usb_audio/playback.py
 
 ### 最小枚举诊断（2026-10-30）
 
-新增 `src/bin/verify_usb.rs`，只运行相同的 USB HS 驱动和一个 vendor 接口，
+新增 `src/bin/verify/verify_usb.rs`，只运行相同的 USB HS 驱动和一个 vendor 接口，
 不启动 ES8311、I2S 或音频任务。测试 VID/PID 为 `CAFE:4012`；即使 Windows
 没有对应类驱动，只要能读出此 VID/PID，就说明设备描述符枚举已成功。
 
@@ -171,4 +171,4 @@ Windows 能读取 `CAFE:4012` 与设备名称。vendor 接口没有类驱动时�
 
 参考：[Embassy UAC1](https://docs.embassy.dev/embassy-usb/0.5.1/default/class/uac1/index.html)、
 [微雪板卡资料](https://docs.waveshare.com/ESP32-P4-NANO-WIFI6-DB)、
-本仓库 `官方资料/ESP32-P4-NANO-WIFI6-DB-官方原理图及位图.pdf` 第 3 页。
+本仓库 `docs/reference/ESP32-P4-NANO-WIFI6-DB-官方原理图及位图.pdf` 第 3 页。

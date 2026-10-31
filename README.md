@@ -1,93 +1,47 @@
-# Waveshare ESP32-P4 ETH mDNS + MIPI DSI
+# ESP32-P4 开发与验证
 
-Waveshare ESP32-P4-ETH mDNS demo, currently configured for minimum chip revision 3.1.
+Waveshare ESP32-P4-ETH / ESP32-P4-NANO-WIFI6-DB 的 Rust 固件、独立演示和硬件验证。
+当前最低芯片版本为 **3.1**，使用本地补丁版 `esp-hal 1.2.0`。
 
-The display path uses stable `esp-hal 1.2.0`'s MIPI-DSI DBI and DPI drivers. It applies
-the Waveshare HX8394 power and vendor sequence for the 5-DSI-TOUCH-A panel
-(720×1280, two lanes at 700 Mbps per lane), then streams an RGB888 PSRAM
-framebuffer through DPI/VDMA. The main binary displays black; `verify_display`
-draws a coordinate guide. See [the initialization summary](doc/DISPLAY_INIT.md)
-for the sequence, delays, panel commands, and clock/timing parameters.
+## 从哪里开始
 
-## Notes
+| 目的 | 固件入口（`--bin`） | 说明 |
+| --- | --- | --- |
+| 纯 Rust 滑条、按钮，无 alloc UI 核心 | `rust_ui_demo` | [运行与验证限制](docs/guides/RUST_UI_DEMO.md) |
+| Slint UI 演示 | `slint_demo` + `--features slint-ui` | [Slint demo](docs/guides/SLINT_DEMO.md) |
+| 完整桌面：触摸、USB、音频、无线 | `desktop` + `--features slint-ui` | [桌面固件](docs/guides/DESKTOP.md) |
+| 触摸宏键盘 / VIA | `keyboard` | [键盘与分区表](docs/guides/KEYBOARD.md) |
+| USB 麦克风 / 扬声器 | `usb_audio` | [接线安全与验证](docs/guides/USB_AUDIO.md) |
+| 基础 Ethernet / mDNS / 黑屏显示 | `main`（默认） | [显示初始化](docs/hardware/DISPLAY_INIT.md) |
+| 双核显示、Wi-Fi/BLE、静态宠物 | `display_core1`、`wifi_ble`、`pet` | [全部入口](docs/README.md) |
+| 单项硬件排查 | `verify_display`、`verify_touch`、`verify_audio`、`verify_usb`、`verify_hosted` | [验证文档索引](docs/README.md) |
 
-- ESP32-P4 SDIO/MIPI coexistence requires serialized cache maintenance. This
-  workspace patches esp-hal locally; see [the verified fix and official references](doc/SDIO_MIPI_CACHE_FIX.md).
-
-- Hardware pinouts: [ESP32-P4-ETH (original board)](doc/pinout.md) and
-  [ESP32-P4-NANO-WIFI6-DB (replacement board)](doc/pinout-nano-wifi6-db.md).
-
-- The build minimum is chip revision `3.1` via `ESP_HAL_CONFIG_MIN_CHIP_REVISION=301`.
-- Ethernet uses the board's RMII PHY path through `esp-p4-eth`.
-- The Cargo runner uses `espflash flash --monitor --chip esp32p4`.
-  The replacement v3.1 board's post-flash reset issue is documented in
-  `doc/DISPLAY_DEBUG.md`.
-- The demo advertises `waveshare-p4-eth.local` and a small `_http._tcp.local` service.
-
-## Flash
-
-`rust_ui_demo` is an allocation-free, pure Rust `embedded-graphics` slider + reset
-button demo, independent of Slint. Build with `cargo build --release --bin rust_ui_demo`.
-See [the firmware/host demo and validation limits](doc/RUST_UI_DEMO.md).
-
-`slint_demo` runs a slider, mode dropdown and draggable 30-item list on core 1.
-Build with `cargo build --release --bin slint_demo --features slint-ui`.
-See [Slint setup and measured partial redraw behavior](doc/SLINT_DEMO.md).
-
-`display_core1` runs display initialization, drawing and VDMA on the second core,
-while core 0 prints a heartbeat. See [the standalone dual-core display demo](doc/DISPLAY_CORE1.md).
-
-`wifi_ble` is the standalone Wi-Fi scan + BLE advertising demo, without display,
-USB or audio. See [build steps and hardware verification](doc/WIFI_BLE.md).
-Run `cargo run --release --bin wifi_ble` to flash and monitor it.
-
-The standalone `verify_hosted` binary runs the on-board C5 SDIO communication check
-in Rust, without initializing display, audio or Ethernet.
-Use the matching Packet + checksum coprocessor firmware and follow
-[the Hosted verification guide](doc/HOSTED_VERIFY.md).
-
-```bash
-cargo run
+```sh
+# 只编译，不连接设备
+cargo build --release --locked --bin rust_ui_demo
+# 烧录并监视（需要 espflash 与目标开发板）
+cargo run --release --locked --bin rust_ui_demo
 ```
 
-Hardware verification binaries are discovered from `src/bin`:
+Cargo 默认目标是 `riscv32imafc-unknown-none-elf`。主机测试和电脑预览必须显式指定主机 target，见 [测试说明](tests/README.md) 和 [UI 主机预览](demos/rust-ui/README.md)。
 
-```powershell
-cargo run --release --bin verify_display
-cargo run --release --bin verify_touch
-cargo run --release --bin verify_audio
-cargo run --release --bin pet
-```
+## 目录
 
-`verify_touch` polls GT911 at `0x5D` and `0x14`, reports probe failures and
-prints all four coordinate rotations. Native coordinates are `(0,0)` at the
-top-left, x increasing right and y increasing down. `verify_audio` initializes
-ES8311, records 3 seconds through I2S0 DMA, then plays the buffer through the
-codec.
+- `src/bin/apps/`：完整应用入口。
+- `src/bin/demos/`：聚焦单一能力的演示入口。
+- `src/bin/verify/`：硬件验证入口。
+- `src/driver/`、`src/task/`：共享驱动与异步任务；`src/*.rs`：现有公共模块与板级配置。
+- `demos/rust-ui/`：独立可测试的无 alloc UI 核心及主机预览。
+- `ui/`、`assets/`：Slint 描述和图像/字体资源。
+- `docs/`：使用指南、硬件说明、历史排障、日志和官方资料，[从索引进入](docs/README.md)。
+- `tests/`：主机测试与实机辅助脚本；`tools/`：资源生成工具。
+- `config/`：烧录配置；`vendor/`：必须保留的第三方源码及本地补丁。
 
-`pet` displays a static whale-girl companion and greeting. Its screen, memory
-requirements, and artwork are described in
-[the pet guide](doc/PET.md).
+所有原有 `--bin` 名称保留；目录整理没有替换驱动或删减功能。迁移路径和验证记录见 [仓库结构](docs/REPOSITORY_LAYOUT.md)。
 
-Adjust the static IPv4 settings in `src/board.rs` if your LAN does not use `192.168.1.0/24`.
+## 使用前注意
 
-## Touchscreen macro keyboard
-
-The integrated `desktop` firmware combines USB keyboard/microphone/speaker,
-C5 Wi-Fi and Bluetooth initialization, and a whale-girl home screen. Display and
-touch run on the second core using Slint. Build with
-`cargo build --release --bin desktop --features slint-ui`.
-The home screen opens a single-layer macropad; settings use a scrolling Wi-Fi list
-and PC-style password keyboard. See [desktop setup and validation status](doc/DESKTOP.md).
-
-`keyboard` provides eight large touch keys (2 columns × 4 rows), four layers,
-USB HID keyboard/media controls and VIA remapping. See [setup, VIA definition and
-the required persistent-storage partition table](doc/KEYBOARD.md).
-
-## USB microphone + speaker (P4+C5 board)
-
-`cargo run --release --bin usb_audio` builds a standalone UAC1 device using
-the NANO-WIFI6-DB USB-A HS port and onboard ES8311 (mono PCM16, 16 kHz).
-Read [USB audio setup and validation](doc/USB_AUDIO.md) before connecting: the
-USB-A port supplies 5 V and requires host VBUS isolation for this experiment.
-Do not connect a normal powered A-to-A cable. Hardware validation is pending.
+- 两块板的引脚不同：[ETH](docs/hardware/pinout.md)、[NANO-WIFI6-DB](docs/hardware/pinout-nano-wifi6-db.md)。网络配置位于 `src/board.rs`。
+- USB-A 音频实验端口供电，**不要使用普通带电 A-to-A 线直接连接主机**。先阅读 [USB 音频安全说明](docs/guides/USB_AUDIO.md)。
+- SDIO/MIPI 共存依赖本地缓存维护补丁，不能直接删除 `vendor/`。见 [缓存修复](docs/notes/SDIO_MIPI_CACHE_FIX.md)。
+- 编译通过不代表真机验证通过，各功能的实测状态与限制以对应指南为准。

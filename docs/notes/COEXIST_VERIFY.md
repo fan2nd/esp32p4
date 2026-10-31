@@ -8,7 +8,7 @@
 
 ## 实现
 
-Wi-Fi/BLE 工作负载从 `src/bin/wifi_ble.rs` 原样移入 `src/task/wifi_ble.rs`，
+Wi-Fi/BLE 工作负载从 `src/bin/demos/wifi_ble.rs` 原样移入 `src/task/wifi_ble.rs`，
 独立例程和组合例程共用同一实现，避免复制协议实现造成差异。
 `display_core1` 默认保持原独立刷屏功能，可用以下 feature 选择对照组：
 
@@ -26,7 +26,7 @@ Wi-Fi/BLE 工作负载从 `src/bin/wifi_ble.rs` 原样移入 `src/task/wifi_ble.
 
 ```powershell
 cargo build --release --bin display_core1 --features verify-radio
-espflash flash --port COM6 --baud 921600 --chip esp32p4 --partition-table partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/display_core1
+espflash flash --port COM6 --baud 921600 --chip esp32p4 --partition-table config/partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/display_core1
 ```
 
 切换 feature 后必须重新构建再烧录，输出 ELF 路径相同。`stage=6` 为静态扫描，

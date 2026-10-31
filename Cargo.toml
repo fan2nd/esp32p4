@@ -3,6 +3,8 @@ edition = "2024"
 name = "waveshare_p4_eth"
 rust-version = "1.91"
 version = "0.1.0"
+autobins = false
+default-run = "main"
 
 [dependencies]
 tiny-ui-demo = { path = "demos/rust-ui", default-features = false }
@@ -62,15 +64,66 @@ linked_list_allocator = { version = "0.10.5", optional = true }
 [build-dependencies]
 slint-build = { version = "=1.18.1", optional = true }
 
+# Application firmware
+[[bin]]
+name = "main"
+path = "src/bin/apps/main.rs"
+
 [[bin]]
 name = "desktop"
-path = "src/bin/desktop.rs"
+path = "src/bin/apps/desktop.rs"
 required-features = ["slint-ui"]
 
 [[bin]]
+name = "keyboard"
+path = "src/bin/apps/keyboard.rs"
+
+[[bin]]
+name = "usb_audio"
+path = "src/bin/apps/usb_audio.rs"
+
+# Focused demos
+[[bin]]
+name = "rust_ui_demo"
+path = "src/bin/demos/rust_ui_demo.rs"
+
+[[bin]]
 name = "slint_demo"
-path = "src/bin/slint_demo.rs"
+path = "src/bin/demos/slint_demo.rs"
 required-features = ["slint-ui"]
+
+[[bin]]
+name = "display_core1"
+path = "src/bin/demos/display_core1.rs"
+
+[[bin]]
+name = "wifi_ble"
+path = "src/bin/demos/wifi_ble.rs"
+
+[[bin]]
+name = "pet"
+path = "src/bin/demos/pet.rs"
+
+# Hardware verification
+[[bin]]
+name = "verify_display"
+path = "src/bin/verify/verify_display.rs"
+
+[[bin]]
+name = "verify_touch"
+path = "src/bin/verify/verify_touch.rs"
+
+[[bin]]
+name = "verify_audio"
+path = "src/bin/verify/verify_audio.rs"
+
+[[bin]]
+name = "verify_usb"
+path = "src/bin/verify/verify_usb.rs"
+
+[[bin]]
+name = "verify_hosted"
+path = "src/bin/verify/verify_hosted.rs"
 
 # Reuse the application's time driver with the upstream Hosted driver.
 [patch."https://github.com/embassy-rs/embassy"]

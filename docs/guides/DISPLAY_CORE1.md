@@ -1,8 +1,8 @@
 # 第二核独立刷屏 demo
 
-增加 Wi-Fi/BLE 的可选对照模式见 [共存验证](COEXIST_VERIFY.md)，默认不启用。
+增加 Wi-Fi/BLE 的可选对照模式见 [共存验证](../notes/COEXIST_VERIFY.md)，默认不启用。
 
-入口：`src/bin/display_core1.rs`。只运行屏幕与双核心跳，不启动 Wi-Fi、BLE、
+入口：`src/bin/demos/display_core1.rs`。只运行屏幕与双核心跳，不启动 Wi-Fi、BLE、
 USB、音频、触摸或 Embassy executor。
 
 主核先初始化共享 PSRAM 映射，再启动副核，将双缓冲显存的独占引用交给副核。
@@ -24,7 +24,7 @@ HFP52，VFP24，约 56 Hz 扫描；两条 DSI lane，700 Mbit/s/lane。
 
 ```powershell
 cargo build --release --bin display_core1
-espflash flash --port COM6 --baud 921600 --chip esp32p4 --partition-table partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/display_core1
+espflash flash --port COM6 --baud 921600 --chip esp32p4 --partition-table config/partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/display_core1
 ```
 
 阶段：1 副核开始；2 面板初始化；3 绘图；4 提交；5 等待 VSYNC。

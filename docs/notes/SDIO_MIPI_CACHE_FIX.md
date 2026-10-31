@@ -23,7 +23,7 @@ CPU 设置 OWNER 并不等于 DMA 已能看到该值，描述符必须正确完�
    - 第 3359 页，表 57.8-1：DES0 bit31 OWNER，DMA 完成后清零。
    - 第 3363 页，57.9.5：DMA 取到 OWNER=0 描述符时挂起并发出 DU。
    - 第 3389 页，寄存器 57.29：IDSTS.DU bit4、FBE bit2、AIS bit9。
-   本地原件：`官方资料/esp32-p4_technical_reference_manual_en.pdf`。
+   本地原件：`docs/reference/esp32-p4_technical_reference_manual_en.pdf`。
 2. [官方 Memory Synchronization 指南](https://docs.espressif.com/projects/esp-idf/en/latest/esp32p4/api-reference/system/mm_sync.html)：
    P4 的 CPU 缓存与 DMA 不自动保持一致，内部 RAM 和 PSRAM 都需要正确同步；
    CPU 更新数据后须在 DMA 读取前做 C2M；API 声明线程安全。
@@ -50,7 +50,7 @@ CPU 设置 OWNER 并不等于 DMA 已能看到该值，描述符必须正确完�
 - 恢复互斥后再次正常；进一步去掉“先等显示两帧再启动 SDIO”的实验延时，
   两模块并行启动仍成功；最终版本连续四轮 Wi-Fi 扫描各返回 16 个 AP，
   刷新达到 997 帧，未观察到 DU/Io/checksum 错误，再次通过 Windows BLE 空口扫描。
-  计数日志保存在 `doc/SDIO_MIPI_VERIFY.log`（保存到第三轮，退出监视时又收到第四轮）。
+  计数日志保存在 `docs/logs/SDIO_MIPI_VERIFY.log`（保存到第三轮，退出监视时又收到第四轮）。
   用户随后确认修复版黄色方块正常移动、显示正常，无条纹或闪烁。
 
 编译验证包括 display_core1 + verify-radio，以及 desktop、wifi_ble、usb_audio。

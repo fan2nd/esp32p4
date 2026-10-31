@@ -39,7 +39,7 @@ cargo run --target x86_64-unknown-linux-gnu --features host --bin demo
 
 根目录 Cargo 配置默认交叉编译，所以运行主机命令时必须明确指定本机 target（上例为 Linux x86_64；
 其他主机请以 `rustc -vV` 的 host 为准）。桌面程序具体操作和验证项见
-[独立 demo 说明](../demos/rust-ui/README.md)。这些命令中的键盘输入是主机 demo 能力，固件没有添加 USB 键盘输入。
+[独立 demo 说明](../../demos/rust-ui/README.md)。这些命令中的键盘输入是主机 demo 能力，固件没有添加 USB 键盘输入。
 
 ## 验证边界
 

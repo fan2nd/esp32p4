@@ -1,7 +1,7 @@
 # 双核桌面固件：复合 USB、Wi-Fi 与蓝牙状态
 
-核心职责划分见 [框架梳理及双核日志审查](DESKTOP_ARCHITECTURE.md)。
-最新音频 DMA 缓存隔离修复与触摸优化见 [本轮验证记录](AUDIO_DMA_CACHE_FIX.md)；
+核心职责划分见 [框架梳理及双核日志审查](../notes/DESKTOP_ARCHITECTURE.md)。
+最新音频 DMA 缓存隔离修复与触摸优化见 [本轮验证记录](../notes/AUDIO_DMA_CACHE_FIX.md)；
 下方排查过程保留历史现象，不代表最新固件仍持续发生这些故障。
 
 `desktop` 是集成固件，保留独立的 `keyboard`、`usb_audio`、`verify_hosted`
@@ -55,7 +55,7 @@ USB 复合设备、Wi-Fi 和 Bluetooth READY，VIA 读取通过。密码键盘�
 随后通过屏幕发起 Wi-Fi 连接，日志确认 association、DHCP 和 SNTP 均成功；
 多次扫描（原始记录 40–62 条）与连接期间，观测到的音频窗口仍为补零/丢包/重启均零。
 屏幕视觉及主观触摸、音频体验仍以用户实机反馈为准。
-CPU 使用率当前未实现，统计方案见 [CPU_USAGE.md](CPU_USAGE.md)。
+CPU 使用率当前未实现，统计方案见 [CPU_USAGE.md](../notes/CPU_USAGE.md)。
 
 当前 Hosted Git 版本使用 xarxa 的 owned-packet 驱动接口，与 embassy-net 0.9
 的 token 接口不同。`driver/hosted_net.rs` 提供有界 12 包静态池与实际接口转换，
@@ -77,7 +77,7 @@ VIA 使用 `assets/p4-desktop-via.json`，不能用独立键盘 `4013` 的定义
 不会让官方 VIA 网站自动读取它。自动加载布局与浏览器的 USB/HID 授权是两件事。
 参考：[VIA 定义规范](https://www.caniusevia.com/docs/specification/)、
 [草稿定义跨会话保存](https://caniusevia.com/docs/whats_new/)。
-分区仍使用 `partitions-keyboard.csv`，可读取原键盘配置。修改配置后空闲约 2 秒
+分区仍使用 `config/partitions-keyboard.csv`，可读取原键盘配置。修改配置后空闲约 2 秒
 保存；播放/录音期间延迟保存。写 Flash 前等待 Core 1 进入内部 RAM 停驻函数，
 禁止其同时从 Flash 取指，完成后恢复。双核写 Flash 的显示/音频影响待实机验证。
 
@@ -89,7 +89,7 @@ VIA 使用 `assets/p4-desktop-via.json`，不能用独立键盘 `4013` 的定义
 
 ```powershell
 cargo build --release --bin desktop --features slint-ui
-espflash flash --port COM6 --baud 921600 --chip esp32p4 --partition-table partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/desktop
+espflash flash --port COM6 --baud 921600 --chip esp32p4 --partition-table config/partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/desktop
 python tests/keyboard/via_probe.py --pid 0x4014 --roundtrip
 python tests/usb_audio/playback.py --device "P4 Desktop"
 cargo test --manifest-path tests/desktop/Cargo.toml --target x86_64-pc-windows-msvc
@@ -99,7 +99,7 @@ cargo test --manifest-path tests/desktop/Cargo.toml --target x86_64-pc-windows-m
 桌面协议/跨线程包池 2 项、键盘 4 项、USB Audio 2 项、Hosted 4 项主机测试通过。
 后续已完成 COM6 烧录，Windows 能枚举复合 USB，日志确认副核启动及 GT911 探测成功。
 此前纯红/通信停止问题经独立组合实验定位到跨核缓存维护缺少互斥，
-详见 [缓存修复记录](SDIO_MIPI_CACHE_FIX.md)。已恢复完整桌面集成并烧录。
+详见 [缓存修复记录](../notes/SDIO_MIPI_CACHE_FIX.md)。已恢复完整桌面集成并烧录。
 VIA 四层键位读取通过，Wi-Fi、蓝牙和触摸初始化成功；USB 播放传输完成。
 麦克风录得的样本幅度接近零，尚未确认声学响应。音频曾出现 DMA 欠载，
 已将缓存写回按 4 KiB 分段互斥，仍需验证长时间音频稳定性。
