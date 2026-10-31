@@ -2,6 +2,7 @@
 
 ## 使用指南 `guides/`
 
+- [纯 Rust 完整桌面](guides/DESKTOP_TINY_UI.md)
 - [纯 Rust UI demo](guides/RUST_UI_DEMO.md)
 - [Slint demo](guides/SLINT_DEMO.md)
 - [完整桌面](guides/DESKTOP.md)

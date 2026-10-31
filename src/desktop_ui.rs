@@ -2,7 +2,8 @@
 use crate::{
     desktop::{self, AccessPoint, Command},
     driver::{display, touch::Gt911},
-    keyboard::{self, MacroPlayer, MacroStep},
+    desktop_controls::MacroController,
+    keyboard,
     password_keyboard::{self, Action, Password},
     slint_backend::{
         DesktopWindow, FRAME, HEAP, HEAP_SIZE, Lines, MacroKey, Network, Platform, TypingKey,
@@ -309,11 +310,8 @@ pub fn run(
     let mut revision = u32::MAX;
     let mut map_revision = u32::MAX;
     let mut shown_second = u64::MAX;
-    let mut held = [0u16; 8];
     let mut old_mask = 0u8;
-    let mut last_report = [0; 10];
-    let mut player = MacroPlayer::default();
-    let mut macro_due = 0;
+    let mut macros = MacroController::default();
     loop {
         if desktop::FLASH_REQUEST.load(core::sync::atomic::Ordering::Acquire) {
             desktop::park_for_flash();
@@ -371,53 +369,10 @@ pub fn run(
             }
         }
         let (view, map) = desktop::with(|s| (s.view.clone(), s.keymap.clone()));
-        if ui.get_page() != 3 {
-            mask = 0;
-            player.active = false;
+        if let Some(report) = macros.update(ui.get_page() == 3, mask, &map, now) {
+            desktop::with(|s| s.report(report));
         }
-        for k in 0..8 {
-            if mask & (1 << k) == 0 {
-                held[k] = 0;
-            }
-        }
-        for k in 0..8 {
-            if mask & !old_mask & (1 << k) == 0 {
-                continue;
-            }
-            // Single visible layer, always VIA layer 0. Layer-switch codes are not
-            // executed; the existing four-bank VIA protocol remains compatible.
-            let code = map.resolved(0, k);
-            held[k] = code;
-            player.active = false;
-            if (0x7700..=0x7707).contains(&code) {
-                player.start(&map, (code - 0x7700) as usize);
-                macro_due = now;
-            }
-        }
-        let report = if player.active {
-            if now >= macro_due {
-                match player.next_step() {
-                    MacroStep::Report(r) => {
-                        macro_due = now + 8;
-                        Some(r)
-                    }
-                    MacroStep::Delay(ms) => {
-                        macro_due = now + ms as u64;
-                        None
-                    }
-                }
-            } else {
-                None
-            }
-        } else {
-            Some(keyboard::report(&held))
-        };
-        if let Some(report) = report {
-            if report != last_report {
-                desktop::with(|s| s.report(report));
-                last_report = report;
-            }
-        }
+        mask = macros.pressed();
         desktop::with(|s| s.pressed = mask);
         if old_mask != mask || map_revision != map.revision {
             for k in 0..8 {

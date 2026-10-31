@@ -10,6 +10,9 @@
 Rust UI 演示与 Slint 演示一样位于根 package：`src/bin/demos/rust_ui_demo.rs`
 直接依赖 tiny-ui，页面模块为 `src/bin/demos/rust_ui_demo/page.rs`，不另建演示 crate。
 
+完整桌面入口为 `src/bin/apps/desktop_tiny_ui.rs`；页面和硬件适配也在主 package，
+同样直接使用 tiny-ui，详见 [组件桌面](../docs/guides/DESKTOP_TINY_UI.md)。
+
 ## 有本地补丁的第三方驱动
 
 - [esp-hal 1.2.2](esp-hal/LOCAL_PATCHES.md)：保留 P4 缓存维护串行化、DMA 对齐/同步等补丁。

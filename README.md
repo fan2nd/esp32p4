@@ -7,6 +7,7 @@ Waveshare ESP32-P4-ETH / ESP32-P4-NANO-WIFI6-DB 的 Rust 固件、独立演示�
 
 | 目的 | 固件入口（`--bin`） | 说明 |
 | --- | --- | --- |
+| 纯 Rust 完整桌面：时钟、Wi-Fi、蓝牙状态、键盘与 USB 音频 | `desktop_tiny_ui` | [组件桌面](docs/guides/DESKTOP_TINY_UI.md) |
 | 纯 Rust 无 alloc 组件框架：滑条、按钮、下拉、列表 | `rust_ui_demo` | [运行与验证限制](docs/guides/RUST_UI_DEMO.md) |
 | Slint UI 演示 | `slint_demo` + `--features slint-ui` | [Slint demo](docs/guides/SLINT_DEMO.md) |
 | 完整桌面：触摸、USB、音频、无线 | `desktop` + `--features slint-ui` | [桌面固件](docs/guides/DESKTOP.md) |
@@ -18,9 +19,9 @@ Waveshare ESP32-P4-ETH / ESP32-P4-NANO-WIFI6-DB 的 Rust 固件、独立演示�
 
 ```sh
 # 只编译，不连接设备
-cargo build --release --locked --bin rust_ui_demo
+cargo build --release --locked --bin desktop_tiny_ui
 # 烧录并监视（需要 espflash 与目标开发板）
-cargo run --release --locked --bin rust_ui_demo
+cargo run --release --locked --bin desktop_tiny_ui
 ```
 
 Cargo 默认目标是 `riscv32imafc-unknown-none-elf`。主机测试必须使用主机 target，见 [测试说明](tests/README.md)。Rust UI 与 Slint 一样直接作为根 package 的 bin 运行，不另设演示 crate 或浏览器预览。
@@ -31,9 +32,9 @@ Cargo 默认目标是 `riscv32imafc-unknown-none-elf`。主机测试必须使用
 - `src/bin/demos/`：聚焦单一能力的演示入口。
 - `src/bin/verify/`：硬件验证入口。
 - `src/driver/`、`src/task/`：共享驱动与异步任务；`src/*.rs`：现有公共模块与板级配置。
-- [3rd/tiny-ui](3rd/tiny-ui/README.md)：可复用的无 alloc UI 框架；Rust UI 页面在 `src/bin/demos/rust_ui_demo/page.rs`，由 `rust_ui_demo` bin 直接使用。
+- [3rd/tiny-ui](3rd/tiny-ui/README.md)：可复用的无 alloc UI 框架；完整桌面页面在 `src/tiny_desktop_page.rs`，由 `desktop_tiny_ui` 使用；`rust_ui_demo` 保留为组件展示。
 - `ui/`、`assets/`：Slint 描述和图像/字体资源。
-- `docs/`：使用指南、硬件说明、历史排障和官方资料，[从索引进入](docs/README.md)。
+- `docs/`：使用指南、硬件说明、设计说明和官方资料，[从索引进入](docs/README.md)。
 - `3rd/*-tests/`：独立主机测试包及实机辅助脚本；`tests/`：测试导航和 Rust UI 页面测试；`tools/`：主机测试脚本及资源生成工具。
 - `config/`：烧录配置；`3rd/esp-hal/`、`3rd/embassy-usb-synopsys-otg/`：必须保留的第三方源码及本地补丁。
 

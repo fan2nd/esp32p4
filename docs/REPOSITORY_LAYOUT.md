@@ -6,13 +6,16 @@
 
 ## 固件入口
 
-根目录仍是一个固件 package。`Cargo.toml` 关闭自动发现并显式列出 14 个 bin，
+根目录仍是一个固件 package。`Cargo.toml` 关闭自动发现并显式列出 15 个 bin，
 名称与 feature 要求保持不变，既有 `cargo ... --bin <name>` 命令仍然适用。
 不指定 `--bin` 时，`cargo run` 现在明确选择基础 `main`。
 
-- `src/bin/apps/`：`main`、`desktop`、`keyboard`、`usb_audio`。
+- `src/bin/apps/`：`main`、`desktop`、`desktop_tiny_ui`、`keyboard`、`usb_audio`。
 - `src/bin/demos/`：`rust_ui_demo`、`slint_demo`、`display_core1`、`wifi_ble`、`pet`。
 - `src/bin/verify/`：`verify_display`、`verify_touch`、`verify_audio`、`verify_usb`、`verify_hosted`。
+
+`desktop` 与 `desktop_tiny_ui` 共用 `src/bin/apps/desktop/runtime.rs` 的 Core 0 服务，
+分别选择 Slint 与纯 Rust 组件 UI 后端，详见 [纯 Rust 完整桌面](guides/DESKTOP_TINY_UI.md)。
 
 共享板级配置、驱动、异步任务及库模块仍在原位置。固件原先的源文件路径
 `src/bin/<name>.rs` 改成上述分类路径；外部 IDE 配置若硬编码了源文件路径需同步。
@@ -34,7 +37,7 @@
 - `assets/` 与 `ui/` 仍供原有固件使用，未删除字体、图像或授权文件。
 - `3rd/esp-hal/`、`3rd/embassy-usb-synopsys-otg/` 包含实际依赖的本地补丁，不是可以随意清理的下载缓存。
 - `3rd/tiny-ui/` 提供独立 UI 框架；根 bin `src/bin/demos/rust_ui_demo.rs` 直接依赖框架，页面模块在 `src/bin/demos/rust_ui_demo/page.rs`，不另设演示 crate。
-- `3rd/*-tests/` 是主机测试与实机辅助脚本，`tests/` 保留测试导航及直接测试 bin 页面模块的 `rust_ui_demo.rs`；`src/bin/verify/` 是板上验证固件。
+- `3rd/*-tests/` 是主机测试与实机辅助脚本，`tests/` 保留测试导航、组件展示 `rust_ui_demo.rs` 及完整桌面 `tiny_desktop.rs` 的页面测试；`src/bin/verify/` 是板上验证固件。
 - `target/` 是忽略的本地构建产物，没有加入版本控制。
 
 ## 前次纯目录整理的软件验证（2026-10-31，25e9a3d）

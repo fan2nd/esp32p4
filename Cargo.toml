@@ -75,6 +75,10 @@ path = "src/bin/apps/desktop.rs"
 required-features = ["slint-ui"]
 
 [[bin]]
+name = "desktop_tiny_ui"
+path = "src/bin/apps/desktop_tiny_ui.rs"
+
+[[bin]]
 name = "keyboard"
 path = "src/bin/apps/keyboard.rs"
 
