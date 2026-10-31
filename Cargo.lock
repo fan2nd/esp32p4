@@ -5230,6 +5230,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tiny-ui-demo"
+version = "0.1.0"
+dependencies = [
+ "embedded-graphics",
+]
+
+[[package]]
 name = "tinystr"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5655,6 +5662,7 @@ dependencies = [
  "slint",
  "slint-build",
  "static_cell",
+ "tiny-ui-demo",
  "xarxa-driver",
 ]
 

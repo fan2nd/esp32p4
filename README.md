@@ -26,6 +26,10 @@ for the sequence, delays, panel commands, and clock/timing parameters.
 
 ## Flash
 
+`rust_ui_demo` is an allocation-free, pure Rust `embedded-graphics` slider + reset
+button demo, independent of Slint. Build with `cargo build --release --bin rust_ui_demo`.
+See [the firmware/host demo and validation limits](doc/RUST_UI_DEMO.md).
+
 `slint_demo` runs a slider, mode dropdown and draggable 30-item list on core 1.
 Build with `cargo build --release --bin slint_demo --features slint-ui`.
 See [Slint setup and measured partial redraw behavior](doc/SLINT_DEMO.md).
