@@ -8,6 +8,8 @@
 - [完整桌面](guides/DESKTOP.md)
 - [宏键盘 / VIA](guides/KEYBOARD.md)
 - [USB 音频](guides/USB_AUDIO.md)
+- [VIA 定义盘](guides/VIA_DRIVE.md)
+- [microSD 读卡器](guides/SD_READER.md)
 - [双核显示](guides/DISPLAY_CORE1.md)
 - [Wi-Fi / BLE](guides/WIFI_BLE.md)
 - [静态宠物](guides/PET.md)

@@ -28,6 +28,7 @@ pub mod driver {
     pub mod touch;
     pub mod usb_audio;
     pub mod usb_msc;
+    pub mod sd_card;
 }
 
 /// Executor-facing long-lived application tasks.

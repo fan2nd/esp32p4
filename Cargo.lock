@@ -5663,6 +5663,7 @@ name = "waveshare_p4_eth"
 version = "0.1.0"
 dependencies = [
  "aligned",
+ "block-device-driver",
  "bt-hci-transport",
  "critical-section",
  "embassy-embedded-hal",

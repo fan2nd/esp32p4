@@ -14,7 +14,7 @@ C5 使用已有 ESP-Hosted MCU 3.0.10 SDIO 固件，本项目不编译 C 固件�
 - 设置页手动点击同步才发起 SNTP 校时，默认 UTC+8；未校时时显示占位值。
 - 8 键单层宏键盘使用 VIA 第 0 层，兼容已有四层存储格式，但屏幕不执行切层。
 - 复合 USB 提供键盘、Consumer Control、VIA Raw HID、UAC1 音频及
-  [VIA 定义只读盘](VIA_DRIVE.md)。
+  [VIA 定义只读盘](VIA_DRIVE.md)和 [microSD 读卡器](SD_READER.md)。
 - 蓝牙状态仅表示控制器初始化结果，不提供配对、蓝牙键盘或音频服务。
 
 USB 状态不能可靠区分物理拔线与主机挂起。Wi-Fi 列表未提供信道信息，

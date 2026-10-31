@@ -28,9 +28,10 @@ MSC 在 Core 0 与既有 USB/audio futures 协作运行，每个 bulk 包后让�
 
 ## 协议与边界
 
-`src/driver/usb_msc/` 分离 FAT 合成、只读 SCSI、BOT 和总线控制桥。
-MSC 为单 LUN、SCSI transparent、Bulk-Only Transport；支持常见容量、
-查询、读块、sense、模式页、弹出命令，所有写入返回 DATA PROTECT。
+`src/driver/usb_msc/` 分离 FAT 合成、逐 LUN SCSI、BOT 和总线控制桥。
+MSC 使用 SCSI transparent、Bulk-Only Transport；LUN 0 为 VIA 只读盘，
+LUN 1 为 [microSD 读卡器](SD_READER.md)，共用接口和端点。支持常见容量、
+查询、读写块、sense、模式页、弹出命令；仅 VIA 盘写入返回 DATA PROTECT。
 不支持的命令返回 ILLEGAL REQUEST，越界读取被拒绝。
 
 无效 CBW 不产生 CSW，必须先 BOT reset 再清除两个端点的 halt。
@@ -44,7 +45,7 @@ CLEAR_FEATURE 再重置 DATA0。USB 新配置会话重新载入虚拟介质。
 跨 Windows/Linux/macOS 的错误恢复和长期音频负载仍需分别做硬件验收。
 
 协议依据：[USB-IF BOT 1.0](https://www.usb.org/sites/default/files/usbmassbulk_10.pdf)。
-现有 Embassy 0.5.1 不含 MSC；本模块是项目内的有限只读实现，未复制新的第三方库。
+现有 Embassy 0.5.1 不含 MSC；本模块是项目内的有限 SCSI/BOT 实现，未复制新的第三方库。
 底层 DWC2 继续使用已保留许可证的本地补丁依赖，详见
 [驱动补丁](../../3rd/embassy-usb-synopsys-otg/PATCHES.md)。
 

@@ -1,9 +1,11 @@
-//! Read-only VIA definition drive: USB MSC BOT + SCSI + synthetic FAT12.
+//! USB MSC BOT with VIA FAT12 (LUN 0) and removable SD card (LUN 1).
 //! Implements USB-IF Bulk-Only Transport 1.0, including reset recovery.
 pub mod bridge;
 mod disk;
 mod scsi;
 
+use crate::driver::sd_card::SdCard;
+use aligned::{A4, Aligned};
 use bridge::{IN, Link, OUT};
 use core::future::pending;
 use embassy_futures::{select::select, yield_now};
@@ -60,7 +62,7 @@ impl Handler for Control<'_> {
         }
         Some(
             if req.request == 0xfe && req.value == 0 && req.length == 1 {
-                b[0] = 0;
+                b[0] = 1; // Highest supported LUN, not the number of LUNs.
                 InResponse::Accepted(&b[..1])
             } else {
                 InResponse::Rejected
@@ -72,10 +74,16 @@ pub struct Msc<'a, D: Driver<'a>> {
     input: D::EndpointIn,
     output: D::EndpointOut,
     link: &'a Link,
-    scsi: Scsi,
+    scsi: [Scsi; 2],
+    card: SdCard,
 }
 impl<'a, D: Driver<'a>> Msc<'a, D> {
-    pub fn new(builder: &mut Builder<'a, D>, control: &'a mut Control<'a>, link: &'a Link) -> Self {
+    pub fn new(
+        builder: &mut Builder<'a, D>,
+        control: &'a mut Control<'a>,
+        link: &'a Link,
+        card: SdCard,
+    ) -> Self {
         let mut function = builder.function(8, 6, 0x50);
         let mut interface = function.interface();
         control.interface = u8::from(interface.interface_number()) as u16;
@@ -89,7 +97,8 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
             input,
             output,
             link,
-            scsi: Scsi::new(),
+            scsi: [Scsi::new(disk::BLOCKS, true), Scsi::new(0, false)],
+            card,
         }
     }
     pub async fn run(&mut self) -> ! {
@@ -98,21 +107,23 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
             self.link.ready().await;
             if media_epoch != self.link.media_epoch.get() {
                 media_epoch = self.link.media_epoch.get();
-                self.scsi = Scsi::new();
+                self.scsi = [Scsi::new(disk::BLOCKS, true), Scsi::new(0, false)];
             }
             let link = self.link;
             let epoch = link.epoch.get();
             // This cancels ANY pending CBW, data, halt wait or CSW on BOT/USB
             // reset. The bridge flushes only these bulk endpoints before reuse.
             select(link.wait(|| link.epoch.get() != epoch), self.session()).await;
-            self.scsi.reset();
+            for lun in &mut self.scsi {
+                lun.reset();
+            }
             yield_now().await;
         }
     }
     async fn session(&mut self) -> Result<(), EndpointError> {
         let mut packet = [0; 64];
         let mut reply = [0; 64];
-        let mut sector = [0; 512];
+        let mut sector: Aligned<A4, [u8; 512]> = Aligned([0; 512]);
         loop {
             self.link.ready().await;
             self.output.wait_enabled().await;
@@ -131,29 +142,36 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
             let tag: [u8; 4] = packet[4..8].try_into().unwrap();
             let host = u32::from_le_bytes(packet[8..12].try_into().unwrap());
             let host_in = packet[12] & 0x80 != 0;
-            let command = if packet[13] != 0 {
-                self.scsi.unsupported_lun()
+            let lun = packet[13] as usize;
+            let cdb = &packet[15..15 + packet[14] as usize];
+            if lun == 1 && !matches!(cdb[0], 0x12 | 0x03 | 0xa0) {
+                let blocks = self.card.refresh(&mut sector).await;
+                self.scsi[1].set_media(blocks);
+            }
+            let command = if lun >= self.scsi.len() {
+                self.scsi[0].unsupported_lun()
             } else {
-                self.scsi
-                    .command(&packet[15..15 + packet[14] as usize], &mut reply)
+                self.scsi[lun].command(cdb, &mut reply)
             };
             let device = match command.data {
                 Data::None => 0,
                 Data::Reply(n) => n as u32,
-                Data::Blocks { bytes, .. } => bytes,
+                Data::Blocks { bytes, .. } | Data::WriteBlocks { bytes, .. } => bytes,
             };
+            let writing = matches!(command.data, Data::WriteBlocks { .. });
             let mut status = u8::from(command.failed);
             let mut processed = 0u32;
-            // Read-only SCSI never has a successful Do phase. All writes fail
-            // with DATA PROTECT and Dn; host OUT is halted, residue stays full.
             if host == 0 {
                 if device != 0 {
                     status = 2;
                 } // BOT cases 2/3.
             } else if host_in {
-                if device == 0 {
-                    self.link.halt(IN).await; // case 4, including command failure.
+                if device == 0 || writing {
+                    self.link.halt(IN).await;
                     self.link.wait(|| self.link.halted.get() & IN == 0).await;
+                    if writing && device != 0 {
+                        status = 2;
+                    } // Hi/Do, case 8.
                 } else {
                     let transfer = host.min(device);
                     match command.data {
@@ -168,7 +186,16 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
                             let mut remaining = transfer;
                             let mut block = lba;
                             while remaining != 0 {
-                                disk::read(block, &mut sector);
+                                if lun == 0 {
+                                    disk::read(block, &mut sector);
+                                } else if !self.card.read(block, &mut sector).await {
+                                    self.scsi[lun].io_failed(false);
+                                    status = 1;
+                                    // Stop the data phase at the failed sector; never fabricate data.
+                                    self.link.halt(IN).await;
+                                    self.link.wait(|| self.link.halted.get() & IN == 0).await;
+                                    break;
+                                }
                                 let count = remaining.min(512) as usize;
                                 for chunk in sector[..count].chunks(64) {
                                     self.input.write(chunk).await?;
@@ -179,17 +206,63 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
                                 block += 1;
                             }
                         }
-                        Data::None => {}
+                        _ => {}
                     }
-                    if host > device && device % 64 == 0 {
-                        self.input.write(&[]).await?;
-                    } // short termination, case 5.
+                    if status == 0 && host > device && device % 64 == 0 {
+                        self.input.write(&[]).await?; // Short termination, case 5.
+                    }
                     if host < device {
                         status = 2;
-                    } // case 7; do not silently truncate successfully.
+                    } // case 7.
                 }
+            } else if let Data::WriteBlocks { lba, .. } = command.data {
+                let mut remaining = host.min(device);
+                let mut block = lba;
+                // A host-short write is a phase error, never a partial-sector write.
+                let mut failed = host < device;
+                if failed {
+                    status = 2;
+                }
+                while remaining != 0 {
+                    let count = remaining.min(512) as usize;
+                    let mut filled = 0;
+                    while filled < count {
+                        let n = self.output.read(&mut packet).await?;
+                        let expected = (count - filled).min(64);
+                        if n != expected {
+                            self.link.locked.set(true);
+                            self.link.halt(OUT).await;
+                            let mut csw = [0; 13];
+                            csw[..4].copy_from_slice(b"USBS");
+                            csw[4..8].copy_from_slice(&tag);
+                            csw[8..12].copy_from_slice(&(host - processed).to_le_bytes());
+                            csw[12] = 2;
+                            self.input.write(&csw).await?;
+                            pending::<()>().await; // Recover only via BOT reset.
+                        }
+                        sector[filled..filled + n].copy_from_slice(&packet[..n]);
+                        filled += n;
+                    }
+                    if !failed {
+                        if self.card.write(block, &sector).await {
+                            processed += 512;
+                        } else {
+                            self.scsi[lun].io_failed(true);
+                            status = 1;
+                            failed = true;
+                        }
+                    }
+                    // After an I/O error drain the rest of host data, keeping the
+                    // residue for sectors not committed to the card.
+                    remaining -= count as u32;
+                    block += 1;
+                    yield_now().await;
+                }
+                if host > device {
+                    self.link.halt(OUT).await;
+                } // case 11.
             } else {
-                self.link.halt(OUT).await; // case 9 (Dn) or 10 (Di).
+                self.link.halt(OUT).await; // cases 9/10: Dn or opposite direction.
                 if device != 0 {
                     status = 2;
                 }

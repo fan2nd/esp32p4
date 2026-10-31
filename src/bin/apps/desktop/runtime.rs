@@ -229,6 +229,20 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         })
         .unwrap();
     let host = SDHOST.init(SdHostController::new(p.SDHOST, SdConfig::default()).unwrap());
+    // The card and C5 occupy different slots of the same serialized SDHOST engine.
+    let card_slot = host
+        .slot::<0>(SlotConfig::default())
+        .unwrap()
+        .with_clk(p.GPIO43)
+        .with_cmd(p.GPIO44)
+        .with_data0(p.GPIO39)
+        .with_data1(p.GPIO40)
+        .with_data2(p.GPIO41)
+        .with_data3(p.GPIO42)
+        .into_async();
+    // Waveshare NANO: P-channel SD power switch is active low.
+    let card_power = Output::new(p.GPIO45, Level::Low, OutputConfig::default());
+    let card = waveshare_p4_eth::driver::sd_card::SdCard::new(card_slot, card_power);
     let bus = host
         .slot::<1>(SlotConfig::default())
         .unwrap()
@@ -319,8 +333,12 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         },
     )
     .split();
-    let mut msc =
-        waveshare_p4_eth::driver::usb_msc::Msc::new(&mut builder, &mut msc_control, &msc_link);
+    let mut msc = waveshare_p4_eth::driver::usb_msc::Msc::new(
+        &mut builder,
+        &mut msc_control,
+        &msc_link,
+        card,
+    );
     builder.handler(&mut usb_status);
     let mut usb = builder.build();
     // All futures run cooperatively on this one thread. RefCell borrows never
