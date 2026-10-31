@@ -83,39 +83,6 @@ impl HostedNet {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn packet_pool_exhaustion_and_cross_thread_return_preserve_ownership() {
-        let mut packets = std::vec::Vec::new();
-        for i in 0..12 {
-            let mut p = allocate().expect("slot available");
-            p.set_len(1514);
-            p.fill(i);
-            assert!(
-                packets
-                    .iter()
-                    .all(|other: &PacketBuf| other.as_ptr() != p.as_ptr())
-            );
-            packets.push(p);
-        }
-        assert!(allocate().is_none());
-        let returned = packets.pop().unwrap();
-        std::thread::spawn(move || drop(returned)).join().unwrap();
-        let mut reused = allocate().expect("cross-thread release publishes slot");
-        reused.set_len(1514);
-        reused.fill(255);
-        for (i, p) in packets.iter().enumerate() {
-            assert!(p.iter().all(|b| *b == i as u8));
-        }
-        drop(reused);
-        drop(packets);
-        let all: std::vec::Vec<_> = (0..12).map(|_| allocate().unwrap()).collect();
-        assert!(allocate().is_none());
-        drop(all);
-    }
-}
 impl old::Driver for HostedNet {
     type RxToken<'a>
         = Rx

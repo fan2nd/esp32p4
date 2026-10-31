@@ -47,14 +47,13 @@ VIA 首次使用需在 Design 页载入本设备 JSON，不能使用独立键盘
 ```powershell
 cargo build --release --bin desktop --features slint-ui
 espflash flash --port COMx --baud 921600 --chip esp32p4 --partition-table config/partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/desktop
-python 3rd/keyboard-host-tests/via_probe.py --pid 0x4014 --roundtrip
-python 3rd/usb-audio-host-tests/playback.py --device "P4 Desktop"
-cargo test --manifest-path 3rd/desktop-protocol-tests/Cargo.toml --target x86_64-pc-windows-msvc
+python tools/via_probe.py --pid 0x4014 --roundtrip
+python tools/usb_audio_playback.py --device "P4 Desktop"
 ```
 
 ## 验证范围与限制
 
-本次框架拆分及依赖升级通过软件构建和主机测试，没有新增板上验证。
+本次框架拆分及依赖升级通过软件构建，没有新增板上验证。
 既有单功能验证不能代替升级后的复合负载验证。
 长期音频稳定性、偶发播放停顿原因、麦克风声学响应、5 GHz 实际连接、
 显示与无线/音频长期共存仍需单独确认。不宣称全功能或长期零断音。

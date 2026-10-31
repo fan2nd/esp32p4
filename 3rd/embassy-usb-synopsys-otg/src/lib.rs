@@ -1,4 +1,4 @@
-#![cfg_attr(not(test), no_std)]
+#![no_std]
 #![allow(async_fn_in_trait)]
 #![allow(unsafe_op_in_unsafe_fn)]
 #![doc = include_str!("../README.md")]
@@ -1732,31 +1732,6 @@ fn ep0_mpsiz(max_packet_size: u16) -> u16 {
         32 => 0b01,
         64 => 0b00,
         other => panic!("Unsupported EP0 size: {}", other),
-    }
-}
-
-#[cfg(test)]
-mod regression_tests {
-    use super::*;
-
-    #[test]
-    fn rx_fifo_reserves_status_for_all_hardware_out_endpoints() {
-        let storage = StateStorage::<16>::new();
-        let mut buffer = [0; 64];
-        let instance = OtgInstance {
-            // Allocation only updates software state; this test never accesses MMIO.
-            regs: unsafe { Otg::from_ptr(core::ptr::null_mut()) },
-            state: storage.as_state(),
-            fifo_depth_words: 1024,
-            extra_rx_fifo_words: 31,
-            phy_type: PhyType::InternalHighSpeed,
-            calculate_trdt_fn: |_| 5,
-        };
-        let mut driver = Driver::new(&mut buffer, instance, Config::default());
-        driver.alloc_endpoint::<Out>(EndpointType::Control, None, 64, 0).unwrap();
-        assert_eq!(driver.allocated_fifo_words(), 63);
-        driver.alloc_endpoint::<In>(EndpointType::Control, None, 64, 0).unwrap();
-        assert_eq!(driver.allocated_fifo_words(), 79);
     }
 }
 

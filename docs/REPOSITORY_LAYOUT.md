@@ -1,7 +1,7 @@
 # 仓库结构与迁移
 
 本次整理调整目录、Cargo 入口注册和文档导航，并将 UI 框架与演示应用分离。
-保留所有应用、演示、验证程序。根固件以外的独立 crate 统一放在 `3rd/`。
+保留所有应用、演示、硬件验证程序。`3rd/` 仅保留 tiny-ui 与两个实际使用的本地补丁依赖。
 本次另将 esp-hal 从 1.2.0 升级到 1.2.2，保留 P4 缓存/DMA 补丁；USB OTG 0.4.0 已是最新稳定发布，保留其全速补丁。
 
 ## 固件入口
@@ -37,60 +37,24 @@
 - `assets/` 与 `ui/` 仍供原有固件使用，未删除字体、图像或授权文件。
 - `3rd/esp-hal/`、`3rd/embassy-usb-synopsys-otg/` 包含实际依赖的本地补丁，不是可以随意清理的下载缓存。
 - `3rd/tiny-ui/` 提供独立 UI 框架；根 bin `src/bin/demos/rust_ui_demo.rs` 直接依赖框架，页面模块在 `src/bin/demos/rust_ui_demo/page.rs`，不另设演示 crate。
-- `3rd/*-tests/` 是主机测试与实机辅助脚本，`tests/` 保留测试导航、组件展示 `rust_ui_demo.rs` 及完整桌面 `tiny_desktop.rs` 的页面测试；`src/bin/verify/` 是板上验证固件。
+- 项目自有测试、`tests/` 与独立主机测试包已移除；实机辅助脚本放到 `tools/`，`src/bin/verify/` 保留板上验证固件。
 - `target/` 是忽略的本地构建产物，没有加入版本控制。
 
-## 前次纯目录整理的软件验证（2026-10-31，25e9a3d）
+## 当前软件验证与运行方式
 
 验证环境为 Linux x86_64、Rust 1.99.1。
 
-- `cargo build --release --locked --bins`：12 个非 Slint 固件完整编译和链接通过。
-- `cargo build --release --locked --bins --features slint-ui -j 1`：全部 14 个入口完整编译和链接通过。
-  初次并行 Slint LTO 构建被环境 SIGKILL；串行重试通过，没有据此修改功能或编译优化配置。
-- `cargo check --release --locked --bins --all-features -j 1`：全部 feature 启用的固件编译检查通过。
-- 主机测试：desktop 2、keyboard 7、hosted 4、usb_audio 2、Rust UI 9，共 24 项通过。
-- Rust UI 主机包 fmt、严格 Clippy、HTTP 输入/帧 smoke 通过。
-- Cargo metadata 确认 14 个 bin 名称及原 feature 门控未变。
-- 仓库内非第三方依赖 Markdown 相对链接检查通过；官方资料和分区表与迁移前逐字节一致。
-- 既有 Rust 模块未做全库格式化，未声称全库 lint 或真机测试通过。
+- `cargo build --release --locked --bins --features slint-ui -j 1`：全部 15 个固件入口完整编译链接通过。
+- `cargo check --release --locked --bins --all-features -j 1`：全特性编译检查通过。
+- tiny-ui 格式检查、主机严格 Clippy 与 RISC-V no_std 编译检查通过。
+- 仓库内非第三方依赖 Markdown 相对链接检查通过。
 
-目录整理不构成新的真机验证，显示颜色、触摸、音频、无线及跨核共存仍以各指南的原有证据为准。
+根 `rust_ui_demo` bin 与 `slint_demo` 一样直接组织演示，依赖 `3rd/tiny-ui`，
+组合页面位于 `src/bin/demos/rust_ui_demo/page.rs`。没有独立 HTTP/浏览器预览包。
+现有截图仅作渲染参考。
 
-## 前次独立框架、3rd 归档与依赖升级验证（2026-10-31）
-
-以下为移除独立演示包之前的历史软件验证，不代表当前布局已重新执行同一验证：
-
-- 根固件以外的 8 个独立 crate 均位于 `3rd/`；原有程序入口名称不变。
-- `tiny-ui` 是可复用的 no_std / 无 alloc 组件框架；`ui-demo` 只负责应用组合。
-- 原 `ui/demo.slint` 的 360×640 展示页对应为 Rust 组件页面；外观差异与未实现能力见 UI 指南。
-- `esp-hal` 从 1.2.0 更新为官方 1.2.2，当前 crates.io 最新稳定发布；USB OTG 0.4.0 已是最新，无需升级。
-  HAL 的三个本地补丁 Rust 文件在官方 1.2.0/1.2.2 中未发生变化，因此保留原补丁内容；
-  其余上游文件更新至 1.2.2。依据与校验见 `3rd/esp-hal/LOCAL_PATCHES.md`。
-- 最终代码冻结后 `cargo build --release --locked --bins --features slint-ui -j 1`：14 个固件完整编译链接通过。
-- 最终代码 `cargo check --release --locked --bins --all-features -j 1`：通过。
-- 主机测试：框架 17、页面集成 11、原四组协议测试 15，共 **43 项通过**。
-- UI 两个 crate 的 fmt 和主机严格 Clippy 通过；框架严格 RISC-V no_std Clippy 通过。
-- UI 核心及组合页 RISC-V / Cortex-M no_std 编译检查通过。
-- HTTP 帧/状态往返、滑条、下拉捕获、拖动/点选、复位、键盘 smoke 通过；JS 语法检查通过。
-- 非第三方依赖 Markdown 本地链接有效；官方资料、分区数据未改动。
-- 独立代码复核并回归了极小滑条裁剪、程序切焦点取消捕获、列表越界滚动命中等问题，无未解决代码阻碍。
-
-真实面板/触摸、实际浏览器操作、帧率/cache/DMA 时序、音频/无线共存均未在本次做新实机验证。
-依赖升级只经软件验证，不继承旧版本硬件结果。此记录不代表仓库 CI 已执行或通过。
-官方 HAL 1.2.2 的 `ld/esp32/linkall.x` 末尾原有空行按原字节保留；仅这一上游文件会产生 git diff 的空白提示。
-
-## Rust UI 改为根 bin
-
-按用户要求，移除独立的 `3rd/ui-demo` 演示包及其 HTTP/浏览器预览。
-根 `rust_ui_demo` bin 与 `slint_demo` 一样直接组织演示，直接依赖 `3rd/tiny-ui`；
-原组合页面移到 `src/bin/demos/rust_ui_demo/page.rs`，场景与固件运行命令保持不变。
-保留页面集成测试于 `tests/rust_ui_demo.rs`，通过 `python3 tools/test_rust_ui_demo.py` 执行，
-不创建额外测试 crate；框架测试仍在 tiny-ui。现有截图仅作未改变场景的渲染参考。
-上述历史 HTTP/浏览器及双 crate 验证记录不适用于移除后的运行方式；
-本次结构调整重新验证：14 个固件完整 release 编译链接与全特性检查通过；
-43 项主机测试通过（17 项框架、11 项直接页面测试、15 项现有协议测试）；
-框架严格 Clippy、变更 Rust 文件格式检查及 76 个文档本地链接检查通过。
-未新增真机验证，未在 macOS/Windows 上运行页面测试脚本；Linux 主机已执行通过。
+以上不代表仓库 CI、全库 lint 或真机验证通过。显示颜色、真实触摸、音频/无线共存、
+帧率及 cache/DMA 时序仍需板上验证；依赖升级不继承旧版本硬件结论。
 
 ## 发布文档范围
 
@@ -98,3 +62,10 @@
 保留开发板配置、用法、设计分析和简洁验证结论，包括尚未解决的音频停顿等限制。
 运行历史、排查过程时间线与日志行为叙述也不纳入发布文档。
 没有重写 Git 历史，也未改动固件的诊断日志代码。本次文档清理不构成新的硬件验证。
+
+## 项目约束与测试清理
+
+[AGENTS.md](../AGENTS.md) 明确禁止添加单元测试。已有项目自有测试、测试专用包和脚本已移除；
+第三方驱动的上游嵌入测试不做无关修改。后续采用构建、静态检查与手动硬件验证，
+不把历史验证结果当作当前改动的实测结果。
+VIA、USB 音频播放/采集辅助工具迁到 `tools/`，用法见 [工具说明](../tools/README.md)。

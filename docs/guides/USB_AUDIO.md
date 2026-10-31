@@ -121,12 +121,8 @@ DAC 设为 0 dB 后的播放已通过听音验证。
   成功并不意味着高速音频已实现。
 
 通过 Cargo patch 固定使用 `3rd/embassy-usb-synopsys-otg`，不修改全局 Cargo
-缓存，也不引入 C。补丁说明和许可证在该目录；FIFO 分配回归测试通过。
-单元测试可在主机运行（将 target 换成本机 `rustc -vV` 的 host）：
-
-```sh
-cargo test --manifest-path 3rd/usb-audio-host-tests/Cargo.toml --target x86_64-pc-windows-msvc
-```
+缓存，也不引入 C。补丁说明和许可证在该目录。项目自有单元测试与主机测试包已移除；
+使用固件构建、静态检查和下述实机验收确认改动。
 
 上板验收：
 
@@ -139,7 +135,7 @@ cargo test --manifest-path 3rd/usb-audio-host-tests/Cargo.toml --target x86_64-p
 Windows 定向播放测试（Python 标准库，不改变系统默认音频设备）：
 
 ```sh
-python 3rd/usb-audio-host-tests/playback.py
+python tools/usb_audio_playback.py
 ```
 
 它向 P4 输出 3 秒、5% 幅度的 440 Hz 测试音。主机完成通知仍需配合实际听音，

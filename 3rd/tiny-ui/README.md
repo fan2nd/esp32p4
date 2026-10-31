@@ -14,6 +14,11 @@ A reusable `#![no_std]`, allocation-free retained UI over `embedded-graphics`
   scrolling. Popups capture input, dismiss outside, and render above all widgets.
 - Keyboard previous/next moves focus; arrows adjust/select; activate operates
   buttons/combos and Escape/Cancel clears activation. Each scene owns its state.
+  Logical focus is separate from its visible keyboard-navigation ring: pointer
+  down hides the ring (including a touch on blank space), while an accepted
+  key-down or explicit `scene.focus(id)` shows it. Touch still produces pressed
+  feedback and selection, but release/cancel does not leave a focus outline.
+  `focused()` returns the logical target; `focus_visible()` reports the ring.
 - Change properties through `scene.update(id, |widget| ...)` to invalidate both
   old/new extents. Identity is preserved by update. `usize::MAX` means no list
   selection. Public values can be assigned directly; rendering clamps scroll and
@@ -24,12 +29,26 @@ A reusable `#![no_std]`, allocation-free retained UI over `embedded-graphics`
   buffers. Save *current scene damage* before rendering for next frame; passing
   the already merged return damage repeatedly will unnecessarily accumulate it.
 
-Host tests: `cargo test --target x86_64-unknown-linux-gnu`. The enclosing firmware
-sets an embedded target, so the explicit host target is intentional. Tests cover
-independent instances, capacity, capture/cancel, overflow-safe ranges, popup/list
-interaction, keyboard focus, UTF-8, localized damage, A/B framebuffer equivalence,
-and preservation of dirty state after draw errors. Physical input/display timing
-requires hardware validation in the integrating application.
+## Module layout
+
+- `components.rs`: configurable widget data, bounds and local interaction state.
+- `event.rs`: input events, widget IDs and application actions.
+- `style.rs` / `text.rs`: palettes, typography and bounded UTF-8 text.
+- `scene/mod.rs`: fixed-capacity storage, lifecycle and dirty regions.
+- `scene/input.rs`: logical focus, keyboard-visible focus, pointer capture and dispatch.
+- `scene/render.rs`: clipped scene repaint and alternating-buffer history repair.
+- `drawing.rs` / `geometry.rs`: component rasterization and rectangle helpers.
+
+Public types remain re-exported at the crate root, so existing applications do not
+need import changes. The framework remains `no_std` and allocator-free.
+
+## Validation
+
+This project does not contain or add unit tests (see the root `AGENTS.md`).
+Use `cargo check --target riscv32imafc-unknown-none-elf`, `cargo fmt --check`, and
+`cargo clippy --lib --target x86_64-unknown-linux-gnu -- -D warnings` from this
+crate. Firmware builds, source/visual review and on-board operation are distinct
+checks; physical input/display timing still requires hardware validation.
 
 ## Minimal composition (no page-specific API)
 
@@ -58,7 +77,7 @@ An unmatched Up never clicks: a matching Down/capture (or keyboard activation)
 is required. Forward the entire input sequence in the real driver.
 Use `scene.update(id, |widget| ...)` when changing components already in a scene.
 A scene can contain multiple sliders/buttons with independent geometry/state,
-not one hardcoded instance of each type. See tests for two-scene independence.
+not one hardcoded instance of each type. Each scene owns its interaction state.
 
 This first version uses a flat retained scene, explicit geometry, static item
 arrays, ASCII bitmap fonts, and built-in widget variants. It is intentionally

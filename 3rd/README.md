@@ -21,11 +21,7 @@ Rust UI 演示与 Slint 演示一样位于根 package：`src/bin/demos/rust_ui_d
 根 `Cargo.toml` 通过 `[patch.crates-io]` 引用它们，不是可直接删除的下载缓存。
 框架 tiny-ui 不依赖这些驱动；复用 UI 时不需要拷贝它们。
 
-## 主机测试包
+## 实机辅助工具
 
-- `desktop-protocol-tests`
-- `hosted-v3-tests`
-- `keyboard-host-tests`
-- `usb-audio-host-tests`
-
-命令和用途见 [测试导航](../tests/README.md)。不把 target 构建目录加入版本控制。
+项目自有主机测试包已移除。VIA 与 USB 音频辅助脚本位于 `tools/`，
+见 [工具说明](../tools/README.md)。`3rd/` 只保留以上三个实际使用的依赖。

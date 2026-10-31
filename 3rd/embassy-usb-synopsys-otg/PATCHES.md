@@ -25,13 +25,9 @@ No C code is built or linked. The receive FIFO accounting was cross-checked
 against the explanation in the upstream TinyUSB DWC2 driver (reference only):
 https://github.com/hathach/tinyusb/blob/master/src/portable/synopsys/dwc2/dcd_dwc2.c
 
-Host regression covers the formerly undersized FIFO allocation for a
-16-endpoint controller. Current board configuration uses full-speed UAC1 on
-the HS PHY. High-speed audio, microphone capture and other controller families
-are not validated by this patch. Dependency refresh does not add hardware validation.
-
-Run the allocation regression:
-
-```sh
-cargo test --manifest-path 3rd/embassy-usb-synopsys-otg/Cargo.toml --target x86_64-pc-windows-msvc --features critical-section/std --lib
-```
+The local allocation unit-test module has been removed under the project policy;
+production FIFO allocation and USB fixes remain unchanged. Current board
+configuration uses full-speed UAC1 on the HS PHY. High-speed audio, microphone
+capture and other controller families are not validated by this patch.
+Dependency refresh does not add hardware validation. Use firmware builds and
+explicit board verification rather than adding local unit tests.

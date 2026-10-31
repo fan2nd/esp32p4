@@ -142,21 +142,6 @@ impl Ui {
             },
         }
     }
-    #[cfg(test)]
-    pub fn state(&self) -> State {
-        self.state
-    }
-    #[cfg(test)]
-    pub fn focus(&self) -> Option<WidgetId> {
-        self.scene.focused()
-    }
-    #[cfg(test)]
-    pub fn scroll_offset(&self) -> u32 {
-        match self.scene.get(ITEMS) {
-            Some(Widget::ListView(v)) => v.scroll,
-            _ => 0,
-        }
-    }
     pub fn dirty(&self) -> Option<Rectangle> {
         self.scene.damage()
     }

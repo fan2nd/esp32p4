@@ -25,16 +25,7 @@ D0..D3=14..17，GPIO54 控制 C5 EN。
 cargo build --release --bin verify_hosted --locked
 ```
 
-握手适配层的主机测试需从工程目录外运行，以避开 P4 target/build-std 配置。
-以下命令先在工程根目录记录路径，再切换到临时目录执行：
-
-```sh
-PROJECT_ROOT="$PWD"
-cd /tmp
-cargo test --manifest-path "$PROJECT_ROOT/3rd/hosted-v3-tests/Cargo.toml" --target aarch64-apple-darwin --locked
-```
-
-已通过 release 构建及 4 项握手/透传测试。Clippy 普通检查通过，现有音频、显示、
+已有项目自有测试与主机测试包已移除。此前 release 构建及普通 Clippy 检查通过，现有音频、显示、
 触摸模块有 4 项警告，因此严格 `-D warnings` 检查不通过。
 
 板上独立验证已通过初始化、版本查询、连续扫描及心跳观察；扫描结果受容器容量限制。
@@ -64,14 +55,5 @@ espflash flash --chip esp32p4 --port "$P4_PORT" --flash-size 16mb --flash-mode d
 ## 预期结果
 
 独立测试程序自动初始化 C5，连续执行 3 次版本查询与 Wi-Fi 扫描，然后观察 45 秒心跳。
-该程序不连接 Wi-Fi。构建通过和握手单元测试通过不能代替板上验证，
+该程序不连接 Wi-Fi。构建与静态检查通过不能代替板上验证，
 此检查也不验证 BLE、联网吞吐或音频。
-
-## Windows 主机测试
-
-独立的 `3rd/hosted-v3-tests/Cargo.toml` 启用 `embassy-time` 的 `std`、
-`generic-queue-8` 和 `critical-section/std`，提供桌面计时与临界区实现，
-不改变 P4 固件配置。
-
-使用 `--target x86_64-pc-windows-msvc` 运行三个独立测试工程：Hosted 4 项、
-键盘 4 项、USB Audio 2 项，全部通过。该主机测试结果不替代 C5 板上握手验证。

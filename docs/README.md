@@ -41,5 +41,5 @@
 ## 工程维护
 
 - [仓库结构、迁移与验证](REPOSITORY_LAYOUT.md)
-- [主机测试](../tests/README.md)
-- [资源生成](../tools/README.md)
+- [项目约束](../AGENTS.md)
+- [实机辅助与资源生成工具](../tools/README.md)

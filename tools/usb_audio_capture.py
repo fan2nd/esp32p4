@@ -5,7 +5,7 @@ import math
 import struct
 import time
 from ctypes import wintypes as w
-from playback import Format, Header
+from usb_audio_playback import Format, Header
 
 
 class InputCaps(c.Structure):

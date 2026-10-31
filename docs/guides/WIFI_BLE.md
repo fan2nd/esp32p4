@@ -34,6 +34,6 @@ SDIO 引脚：CLK18、CMD19、D0～D3 为 14/15/16/17；C5 RESET54，20 MHz。
 ## 验证结论与限制
 
 独立固件已通过 C5 初始化、Wi-Fi 扫描、BLE 广播命令及电脑端空口扫描，
-静态包池主机测试通过。扫描受容量上限限制；默认扫描模式的连接/DHCP 尚未验证。
+扫描受容量上限限制；默认扫描模式的连接/DHCP 尚未验证。
 
 BLE 广播参数和命令布局核对来源：[Zephyr HCI 定义](https://github.com/zephyrproject-rtos/zephyr/blob/main/include/zephyr/bluetooth/hci_types.h)。

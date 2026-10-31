@@ -386,7 +386,11 @@ impl Ui {
                     Some(Widget::ListView(l)) => l.scroll,
                     _ => 0,
                 };
-                let mut list = target.clipped(&rect(12, 150, 336, 374));
+                // Scene has already drawn the list focus ring. Keep overlays
+                // inside its rounded, radius-8 perimeter, including when a
+                // scrolled separator crosses the top or bottom edge.
+                let interior = rect(16, 154, 328, 366);
+                let mut list = target.clipped(&interior);
                 for (i, n) in self.networks.iter().enumerate() {
                     let y = 150 + i as i32 * 70 - scroll as i32;
                     if y + 70 < 150 || y >= 524 {
@@ -402,7 +406,7 @@ impl Ui {
                     )
                     .ok();
                     text(&mut list, &detail, Point::new(22, y + 40), accent())?;
-                    list.fill_solid(&rect(12, y + 68, 336, 2), background())?;
+                    list.fill_solid(&rect(16, y + 68, 328, 2), background())?;
                 }
                 text(
                     target,

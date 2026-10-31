@@ -68,17 +68,15 @@ USB 键盘、Consumer Control、VIA 分别使用独立 HID 接口。
 ## 验证与当前状态
 
 ```powershell
-cargo test --manifest-path 3rd/keyboard-host-tests/Cargo.toml --target x86_64-pc-windows-msvc
 python -m pip install hidapi
-python 3rd/keyboard-host-tests/via_probe.py
-python 3rd/keyboard-host-tests/via_probe.py --roundtrip
+python tools/via_probe.py
+python tools/via_probe.py --roundtrip
 ```
 
 读测试检查版本、层数、宏容量、全部键码；roundtrip 临时修改 L3 最后一个键后恢复，
 不发送键盘输入。持久化还需复位后重读；触摸坐标、按住/释放和界面需要板上验证。
 
-release 构建和主机测试通过；实机通过 HID 枚举、VIA 读写与复位恢复、
-触摸高亮及层切换验证。VIA 网页界面、全部宏与媒体键仍需逐项验收；
+固件 release 构建通过，不代替当前硬件验收。VIA 网页界面、全部宏与媒体键仍需逐项验收；
 触摸控制器偶发启动延迟的硬件原因尚未确定。
 
 ### 绘制策略
