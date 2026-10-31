@@ -47,3 +47,31 @@ CLEAR_FEATURE 再重置 DATA0。USB 新配置会话重新载入虚拟介质。
 现有 Embassy 0.5.1 不含 MSC；本模块是项目内的有限只读实现，未复制新的第三方库。
 底层 DWC2 继续使用已保留许可证的本地补丁依赖，详见
 [驱动补丁](../../3rd/embassy-usb-synopsys-otg/PATCHES.md)。
+
+## 2026-11-01 枚举修复与实机验证
+
+在 P4 v3.1 / Windows 上复现 WIP 分支的未知 USB 设备问题，串口捕获到
+Embassy USB 0.5.1 `src/lib.rs` 字符串描述符编码路径的
+`control buffer too small` panic。新增产品名
+`P4 Desktop Keyboard + Audio + VIA Drive` 编码后需要 80 字节，而共享
+运行代码只分配了 64 字节控制请求缓冲。
+
+控制缓冲改为 256 字节，覆盖 USB 字符串描述符容量及当前 Embassy 的边界检查。
+EP0 最大包长仍为 64 字节，由协议栈分包；不需要减少 MSC 端点、改 VID/PID，
+也不改变音频、无线和屏幕参数。用于复现的直接串口 panic 输出已撤回，继续
+遵守既有日志输出路径。未新增单元测试或测试脚本。
+
+已验证：
+
+- `desktop_tiny_ui` release 构建、烧录和启动；Slint `desktop --features slint-ui`
+  release 构建通过（本轮未烧录 Slint）。
+- Windows 正常识别复合设备、MSC、HID 和音频接口，挂载 `P4 VIA` FAT 盘。
+- 读取盘内 `VIA.json`（382 字节），SHA-256 与编译输入文件完全一致。
+- 现有 VIA 探针读取四层键码、宏容量和协议版本成功，未修改键位。
+- USB-A 实际拔插后再次配置成功，磁盘重新挂载，JSON 哈希与 VIA 探针再次通过；
+  用户确认屏幕和声音正常。
+- 主机三秒音频播放完成；观察到的播放统计 empty/drop/restart 均为 0。
+- 麦克风接口可采集三秒、48,000 个样本，但存在削波，不能据此确认录音音质；
+  本次未调整麦克风增益。
+
+跨系统兼容性、BOT 异常恢复及长期并发负载尚未完成验证。

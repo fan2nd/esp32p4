@@ -22,7 +22,6 @@ use esp_hal::{
 use esp_storage::FlashStorage;
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    esp_println::println!("DIRECT PANIC: {}", info);
     waveshare_p4_eth::diagnostic!(
         "desktop PANIC core={:?}: {}",
         esp_hal::system::Cpu::current(),
@@ -185,7 +184,11 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     let mut descriptors = [0; 1024];
     let mut bos = [0; 64];
     let mut msos = [0; 64];
-    let mut control_buffer = [0; 64];
+    // Embassy encodes an entire UTF-16 string descriptor here before EP0
+    // splits it into 64-byte packets. The product name alone needs 80 bytes;
+    // 256 covers the USB string descriptor limit, including Embassy's spare
+    // byte assertion. This is not the endpoint's maximum packet size.
+    let mut control_buffer = [0; 256];
     let mut keyboard_state = State::new();
     let mut consumer_state = State::new();
     let mut raw_state = State::new();
