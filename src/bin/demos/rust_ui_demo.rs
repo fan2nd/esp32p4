@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-//! Pure Rust, allocation-free slider/button demo on the existing P4 display path.
+//! Pure Rust component-framework showcase matching ui/demo.slint geometry.
 use core::{
     convert::Infallible,
     sync::atomic::{AtomicU32, Ordering},
@@ -27,7 +27,7 @@ const PANEL_WIDTH: usize = 720;
 const PANEL_HEIGHT: usize = 1280;
 const FRAME: usize = PANEL_WIDTH * PANEL_HEIGHT * 2;
 const SCALE: i32 = 2;
-const OFFSET: Point = Point::new(40, 400);
+const OFFSET: Point = Point::zero();
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
@@ -77,13 +77,14 @@ fn logical(p: Point) -> Point {
     )
 }
 fn dispatch(ui: &mut Ui, event: Event) {
-    match ui.handle(event) {
-        Some(Action::ValueChanged(value)) => esp_println::println!("rust-ui: value={}", value),
-        Some(Action::Clicked) => {
-            ui.set_value(50);
-            esp_println::println!("rust-ui: reset=50");
+    // Application-level actions are separate from components and hardware I/O.
+    if let Some(action) = ui.handle(event) {
+        match action {
+            Action::VolumeChanged(value) => esp_println::println!("rust-ui: volume={}", value),
+            Action::ItemSelected(index) => esp_println::println!("rust-ui: item={}", index + 1),
+            Action::ModeChanged(index) => esp_println::println!("rust-ui: mode={}", index),
+            Action::Reset => esp_println::println!("rust-ui: reset controls"),
         }
-        None => {}
     }
 }
 

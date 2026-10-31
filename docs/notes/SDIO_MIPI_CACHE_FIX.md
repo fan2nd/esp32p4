@@ -2,19 +2,12 @@
 
 日期：2026-10-31。硬件：ESP32-P4-NANO-WIFI6-DB，P4 v3.1，C5 Hosted 3.0.10。
 
-## 根因与证据
+## 设计问题
 
-两个外设可以同时工作。本次故障来自当前 esp-hal P4 缓存维护入口没有统一
-跨核互斥：副核 MIPI VDMA 中断维护显示描述符，主核 SDIO 维护收发缓冲和描述符，
-两者会并发调用共享缓存控制器的 ROM 写回/失效操作。
-
-实测 SDIO `IDSTS=0x2210`：DU 位 4 与 AIS 位 9 置位，FBE 位 2 未置位。
-这不是“总线致命错误”。官方 TRM 说明 DU 在 DMA 看到 OWNER=0 时触发。
-CPU 设置 OWNER 并不等于 DMA 已能看到该值，描述符必须正确完成缓存写回。
-
-官方实现、源码差异及 A/B 结果共同定位到缓存维护的并发问题；没有直接记录
-每个重叠 ROM 操作的寄存器访问，因此不声称已观察到具体哪个地址/长度寄存器
-被覆盖。不能据此将所有复合固件问题都归结于该原因。
+副核 MIPI VDMA 中断与主核 SDIO 都会维护 DMA 描述符和数据缓存。
+共享缓存控制器的 ROM 操作必须跨核互斥；CPU 设置 OWNER 并不意味着 DMA
+已看见新值，还需要正确缓存同步。描述符不可用与总线致命错误是不同状态。
+本补丁只覆盖缓存操作互斥，不据此保证所有复合负载问题均已解决。
 
 ## 官方资料
 
@@ -36,26 +29,12 @@ CPU 设置 OWNER 并不等于 DMA 已能看到该值，描述符必须正确完�
 5. [P4 v3.x 官方升级说明](https://documentation.espressif.com/esp32-p4-chip-revision-v3.x_user_guide_en.html)：
    v3.x 有内存架构和寄存器变化，不能直接套用旧版 P4 固件假设。
 
-## 修复及对照
+## 补丁与验证边界
 
-`vendor/esp-hal/src/soc/esp32p4/mod.rs` 增加共享 `CACHE_OP_LOCK`，完整保护
-数据写回、数据失效和指令缓存失效的 ROM 调用，使用 esp-sync RawMutex 处理
-跨核互斥与本核中断。未降低 SDIO 时钟、MIPI 时钟，也未停用任一外设。
+`3rd/esp-hal/src/soc/esp32p4/mod.rs` 的 `CACHE_OP_LOCK` 完整保护数据写回、
+数据失效和指令缓存失效的 ROM 调用，使用 esp-sync RawMutex 处理跨核互斥与本核中断。
+不降低 SDIO/MIPI 时钟，也不停用外设。
 
-- 修复前：MIPI 开启时反复 DU、Io、checksum/timeout；停止 CPU 重绘仍会失败。
-- 加锁：动态画面累计超过 900 帧，Wi-Fi 多轮扫描成功；Windows Bleak 收到
-  `44:BD:8D:D0:A5:3E / P4-WiFi-BLE` 实际广播，没有观察到 DU。
-- 反向对照：仅去掉三个缓存操作的互斥，再次出现 `IDSTS=0x2210`、DmaError、
-  后续连续 Timeout / HeartbeatStopped。
-- 恢复互斥后再次正常；进一步去掉“先等显示两帧再启动 SDIO”的实验延时，
-  两模块并行启动仍成功；最终版本连续四轮 Wi-Fi 扫描各返回 16 个 AP，
-  刷新达到 997 帧，未观察到 DU/Io/checksum 错误，再次通过 Windows BLE 空口扫描。
-  计数日志保存在 `docs/logs/SDIO_MIPI_VERIFY.log`（保存到第三轮，退出监视时又收到第四轮）。
-  用户随后确认修复版黄色方块正常移动、显示正常，无条纹或闪烁。
-
-编译验证包括 display_core1 + verify-radio，以及 desktop、wifi_ble、usb_audio。
-主机包池测试通过；它验证缓冲独占/归还，不用于证明硬件缓存互斥，后者由
-上述实机正反对照验证。
-当前板上验证的是动态显示 + 无线组合，不包含 USB/音频。完整 desktop 的红屏
-是否也由该问题导致，需要单独验证；全帧 cache writeback 持锁时长对音频实时性
-也不在本次结论范围内。
+历史组合验证支持保留该补丁，但不代替当前依赖版本的实机回归。
+主机包池测试只验证缓冲独占与归还，不能证明硬件缓存互斥。
+USB/音频复合负载、缓存持锁时长对实时音频的影响及长期稳定性仍需单独验证。

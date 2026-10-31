@@ -27,9 +27,11 @@ Unicode 宏或全部扩展 QMK 键码。未知键码会保留并显示十六进�
 
 ## 构建与烧录
 
+以下 `COMx` 须替换为实际板卡串口。
+
 ```powershell
 cargo build --release --bin keyboard --features keyboard-low-refresh
-espflash flash --port COM6 --chip esp32p4 --partition-table config/partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/keyboard
+espflash flash --port COMx --chip esp32p4 --partition-table config/partitions-keyboard.csv --monitor target/riscv32imafc-unknown-none-elf/release/keyboard
 ```
 
 必须带该分区表，不能直接使用默认 `cargo run` runner 烧录后期待掉电保存。
@@ -66,49 +68,34 @@ USB 键盘、Consumer Control、VIA 分别使用独立 HID 接口。
 ## 验证与当前状态
 
 ```powershell
-cargo test --manifest-path tests/keyboard/Cargo.toml --target x86_64-pc-windows-msvc
+cargo test --manifest-path 3rd/keyboard-host-tests/Cargo.toml --target x86_64-pc-windows-msvc
 python -m pip install hidapi
-python tests/keyboard/via_probe.py
-python tests/keyboard/via_probe.py --roundtrip
+python 3rd/keyboard-host-tests/via_probe.py
+python 3rd/keyboard-host-tests/via_probe.py --roundtrip
 ```
 
 读测试检查版本、层数、宏容量、全部键码；roundtrip 临时修改 L3 最后一个键后恢复，
 不发送键盘输入。持久化还需复位后重读；触摸坐标、按住/释放和界面需要板上验证。
 
-2026-10-31：release 构建和 4 项主机测试通过。已烧录并自动启动，串口确认
-`GT911 ready; storage=true restored=false generation=0`，屏幕 DPI 启动正常。
-首次烧录遇到 espflash 的自定义分区子类型解析崩溃，已改用支持的分区类型。
-后续已接好 USB-A 数据线并完成以下实机验证：
+release 构建和主机测试通过；实机通过 HID 枚举、VIA 读写与复位恢复、
+触摸高亮及层切换验证。VIA 网页界面、全部宏与媒体键仍需逐项验收；
+触摸控制器偶发启动延迟的硬件原因尚未确定。
 
-- Windows 正常识别 `CAFE:4013` 的键盘、Consumer Control、VIA 三个 HID 接口。
-- VIA 版本、层数、宏容量和全部 32 个键码读取通过；临时改键、读回和恢复原键值通过。
-- 写入完成后串口显示 `save ok generation=5`；复位启动显示
-  `storage=true restored=true generation=5`，全部键值再次读取一致。
-- 用户在记事本确认 COPY / PASTE 能将 `abc` 变为 `abcabc`，按下高亮、松手恢复正常。
-- 本次直接验证 Raw HID 协议，尚未逐项验收 VIA 网页界面、全部宏及媒体键。
+### 绘制策略
 
-### 绘制卡顿修复
+使用内部 RAM 条带绘制、32 位对齐批量写入 PSRAM，并在条带间让出执行权，
+保持 USB 收发；只更新受影响区域。键盘例程在 rev3.1 上使用 400 MHz CPU。
 
-初版按像素直接写 PSRAM，重画阻塞协作任务，导致改键后的下一条 USB 请求超时。
-改为内部 RAM 的 16 行条带绘制，按 32 位对齐批量复制到 PSRAM；条带间主动让出
-执行权，保持 USB 收发。只重画可见键名或按下状态变化的区域，裁剪纯色填充范围。
-
-同时将键盘例程的 CPU 从 HAL 默认 100 MHz 配置切换到 rev3.1 支持的 400 MHz
-配置。相同页眉更新由约 5.5 秒降至 127～137 ms，实测单键按下/松手更新约
-56～57 ms。该数字是本板串口计时结果，不代表所有画面的统一帧率。
-上述数据来自当时的 RGB888 单缓冲版本；后续已改为下述 RGB565 双缓冲。
-
-### RGB565、降低刷新率和双缓冲实测（2026-10-31）
+### RGB565、降低刷新率和双缓冲
 
 键盘显存改为 16-bit 565，DSI 输出继续保持 RGB888，由桥接硬件转换。
 此板现有 RGB/BGR 配置下，565 打包需要 B 占 bits 15:11、G 占 bits 10:5、
-R 占 bits 4:0（小端）。最初使用相反红蓝顺序，青色变黄、蓝色变棕；
-调整后用户确认颜色正常。其他显示例程仍用原 RGB888 配置。
+R 占 bits 4:0（小端）。
 
 `keyboard-low-refresh` 保持请求像素时钟 58 MHz、实际 60 MHz、HFP=52、
 行周期约 14 µs，只把 VFP 从 24 增至 1023。VFP 寄存器宽度为 10 位，
-总行数为 1280+4+10+1023=2317。16 个帧间隔测得平均 32416～32420 µs，
-约 30.85 Hz；不是将应用刷新计时器调慢后声称降低了屏幕扫描率。
+总行数为 1280+4+10+1023=2317，扫描频率约 30.85 Hz；
+这是面板时序配置，不是应用刷新计时器。
 
 | 配置 | 单帧字节 | 平均扫描读取量（估算） |
 | --- | ---: | ---: |
@@ -117,22 +104,19 @@ R 占 bits 4:0（小端）。最初使用相反红蓝顺序，青色变黄、蓝
 | RGB565，30.85 Hz | 1,843,200 | 约 57 MB/s |
 
 以上为有效像素读取量，不含总线额外开销。延长消隐减少平均流量、增加空闲时间，
-有效区瞬时读取压力并不会按帧率比例下降。单缓冲阶段单键绘制从约 56 ms
-降至 34～35 ms，但用户看到按下时出现横条纹。
+有效区瞬时读取压力并不会按帧率比例下降。
 
-随后改为两块 1,843,200 字节帧缓冲，总计 3,686,400 字节（约 3.52 MiB）。
+使用两块 1,843,200 字节帧缓冲，总计 3,686,400 字节（约 3.52 MiB）。
 CPU 只更新后台，commit 切换后先消耗可能积压的 VSYNC，再等待两个新帧边界，
 防止 HAL 预取的旧 LLI 仍引用待复用缓冲。每次在后台补画上一轮脏区域，
 避免轮换后旧高亮或键名回滚，不做每次全帧复制。
 
-帧边界等待会增加更新延迟，因此不能再把单缓冲的 34 ms 当成最终完整更新耗时。
-用户确认当前双缓冲版颜色、按下/松开、L0～L3 切换正常，无横条纹、旧高亮残留或闪烁。
-VIA 改键读写测试通过。启动时 GT911 曾短暂 NACK，现有有界启动重试及后台重新探测，
-日志确认能自动恢复；尚未确定触摸控制器偶发启动延迟的硬件原因。
+帧边界等待会增加端到端更新延迟；不能将绘制耗时等同于完整更新耗时。
+GT911 使用有界启动重试与后台重新探测。
 
 桥接格式参考：[Espressif MIPI DSI bridge HAL](https://github.com/espressif/esp-idf/blob/master/components/esp_hal_lcd/esp32p4/include/hal/mipi_dsi_brg_ll.h)。
 
-### 能否暂停 MIPI DMA、更新后再恢复（2026-10-31）
+### 能否暂停 MIPI DMA、更新后再恢复
 
 硬件 VDMA 支持暂停/恢复，但它与“屏幕安全地保持上一帧”不是同一件事。
 当前 HX8394 使用 DSI Video Mode，由 P4 连续扫描 PSRAM。只暂停 VDMA 而让
@@ -143,14 +127,14 @@ DPI/DSI 继续输出，会使桥接 FIFO 面临欠载；暂停整个视频输出
 关闭 DPI、释放时钟并关闭 DPHY，并非轻量暂停。私有 VDMA start 会设置链表
 地址并使能通道；不能把清除/设置通道使能直接当作经过验证的扫描恢复流程。
 
-当前垂直消隐为 4+10+24=38 行，以约 14 µs 行周期估算仅 0.532 ms；
-单键更新约 56 ms，不能仅靠等 VSYNC 后暂停 DMA，就把完整更新放进消隐期。
+默认 VFP=24 时，垂直消隐为 4+10+24=38 行，以约 14 µs 行周期估算仅 0.532 ms；
+不能假设完整更新能放进消隐期。
 
 若目标是避免撕裂，优先考虑双缓冲：DMA 扫描前台帧，CPU 更新后台帧，
 缓存写回后在安全帧边界切换，确认旧帧已不被 DMA 使用后才允许重写。
 RGB888 两帧共 5,529,600 字节，约 5.27 MiB；双缓冲并不会消除 PSRAM 带宽竞争。
 HAL 的 commit 修改 LLI 源地址，仍需核实硬件锁存边界和缓冲释放时机，
-不能把任意时刻调用 commit 等同于已实现无撕裂翻帧。本轮仅核查与说明，未修改固件。
+不能把任意时刻调用 commit 等同于已实现无撕裂翻帧。暂停/恢复方案尚未完成硬件验证。
 
 参考：[Espressif MIPI DSI 工作方式](https://github.com/espressif/esp-iot-solution/blob/master/docs/en/display/lcd/mipi_dsi_lcd.rst)、
 [ESP32-P4 数据手册 VDMA 功能](https://documentation.espressif.com/esp32-p4_datasheet_en.html)，

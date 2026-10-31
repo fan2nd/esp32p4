@@ -13,7 +13,7 @@
 - [Hosted 通信验证](guides/HOSTED_VERIFY.md)
 - [音频验证](guides/AUDIO_VERIFY.md)
 
-`verify_display` 与 `verify_touch` 的操作记录另见硬件初始化和排障笔记。
+`verify_display` 与 `verify_touch` 的操作说明另见硬件初始化和排障笔记。
 `verify_usb` 的说明在 USB 音频指南中。
 
 ## 硬件 `hardware/`
@@ -25,7 +25,7 @@
 
 ## 设计与排障 `notes/`
 
-这些文档包含不同阶段的实验结论，保留其原有时间和验证范围，不代表每项均已在当前硬件复测。
+这些文档保留技术设计、操作方法与简洁验证边界，不收录运行历史或原始日志；不代表已在当前硬件复测。
 
 - [桌面架构](notes/DESKTOP_ARCHITECTURE.md)
 - [UI 框架选型](notes/UI_FRAMEWORK_OPTIONS.md)
@@ -36,7 +36,6 @@
 - [显示与无线共存](notes/COEXIST_VERIFY.md)
 - [SDIO/MIPI 缓存修复](notes/SDIO_MIPI_CACHE_FIX.md)
 - [音频 DMA 缓存修复](notes/AUDIO_DMA_CACHE_FIX.md)
-- [原始验证日志](logs/)
 
 ## 工程维护
 

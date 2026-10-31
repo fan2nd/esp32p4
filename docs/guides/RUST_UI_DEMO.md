@@ -1,58 +1,75 @@
-# 无堆分配的 Rust 滑条与按钮 demo
+# 纯 Rust UI 组件框架与 P4 示例
 
-此例程保留原有 `desktop` / Slint 程序，另提供 `rust_ui_demo` 固件入口。
-UI 核心是 `demos/rust-ui` 内的 `tiny-ui-demo`：`#![no_std]`、无 `alloc`、无全局分配器，
-只依赖 `embedded-graphics 0.8`。它不是完整 GUI 框架，也不引入 C/C++ UI 库。
+本次把原先写死两个控件的演示拆成真正独立的组件 crate，保留旧 Slint 程序作对照：
 
-## 固件
+| 层次 | 路径 | 职责 |
+| --- | --- | --- |
+| 可复用框架 | [`3rd/tiny-ui`](../../3rd/tiny-ui/README.md) | `Scene<N>`、组件、输入捕获/焦点、脏区绘制，无页面 ID/板级依赖 |
+| 演示应用 | [`3rd/ui-demo`](../../3rd/ui-demo/README.md) | 组合组件、业务状态、标签更新与复位策略，附主机预览 |
+| 固件适配 | `src/bin/demos/rust_ui_demo.rs` | GT911 输入、屏幕映射、PSRAM/DMA 双缓冲 |
+| 原版参考 | `ui/demo.slint` / `slint_demo` | 原 Slint 控件展示页面，不修改或移除 |
+
+框架与演示核心均 `#![no_std]`，不使用 `alloc`。框架只依赖 `embedded-graphics 0.8`，
+不依赖 HAL、Slint、第三方板级补丁或操作系统。它是第一版固定容量保留式组件框架，
+不是完整复刻 Slint 语言、布局引擎或运行时。
+
+## 对照原 Slint 效果
+
+![Rust UI 实际软件渲染结果](../images/rust-ui-demo.png)
+
+复刻的是 `ui/demo.slint` 的 **360×640 控件展示页**，不是 `ui/desktop.slint` 的完整桌面：
+
+- 浅蓝背景、圆角白色音量区域、0–100 滑条，初始音量 35。
+- Mode 下拉框：Normal、Quiet、Music、Game，弹出菜单位于上层并捕获输入；点击外部只关闭，不穿透点击列表。
+- 30 行 Item 列表，60 像素行高；拖动滚动、点选高亮并更新标签。拖动不产生误点击。
+- Reset controls 恢复音量 35、取消列表选择，按原 Slint 页面逻辑保留模式和滚动位置。
+- 主机 Tab / Shift-Tab 切换焦点；方向键调整滑条/选项，Enter/空格激活，Escape 关闭弹出层。
+
+差异明确保留：标题标记 RUST；字体使用 ASCII 位图字体（18/20 像素），没有 Slint 的字体抗锯齿、
+精确原生控件皮肤或动画。当前列表为矩形裁剪（与原圆角容器边缘略有差异）、直接拖动，无惯性/回弹；没有自动布局、嵌套控件树或任意自定义控件 trait。
+现阶段通过配置组件几何和样式组合页面；新控件类型需扩展框架 `Widget` 枚举。
+
+## 固件运行
+
+从仓库根目录：
 
 ```sh
-cargo build --release --bin rust_ui_demo
-cargo run --release --bin rust_ui_demo
+cargo build --release --locked --bin rust_ui_demo
+cargo run --release --locked --bin rust_ui_demo
 ```
 
-无需开启 `slint-ui`。沿用项目的 stable 工具链、`riscv32imafc-unknown-none-elf` 目标、
-最小芯片版本 3.1、现有 Waveshare 720×1280 MIPI 面板初始化和 GT911 驱动。
-构建和闪存前请阅读根目录说明，并确认板型与引脚适配；没有接入真实硬件的环境不能验证显示/触摸效果。
+无需开启 `slint-ui`。仍使用项目 stable 工具链、`riscv32imafc-unknown-none-elf`、
+最低芯片版本 3.1 和现有 720×1280 MIPI 面板/GT911 驱动。
+烧录前须确认板型、串口、引脚和供电安全。
 
-- 320×240 逻辑画布放大两倍，居中于物理 `(40,400)` 至 `(679,879)`，画布外为黑色。
-- 拖动滑条设置 0–100；点击 RESET 按钮恢复 50。数值只是示例状态，不控制实际音量或背光。
-- 核 1 独占 UI、触摸、显示和帧缓冲；核 0 每两秒打印心跳及更新次数。
-- 固定 PSRAM 双缓冲共 `720 * 1280 * 2 * 2 = 3,686,400` 字节；核 1 栈为 32 KiB。
-  无堆分配并不等于无需显存；这里使用静态大小的 PSRAM 映射切片。
-- RGB565 逻辑颜色转换成现有面板验证过的 BGR565 小端字节。显示底层保持不变。
-- 只在 UI 脏区出现时绘制/提交；修复当前脏区和前一次逻辑脏区，防止交替缓冲恢复旧画面。
-  启动时两块缓冲都完整初始化。缓存维护由现有 `dpi.commit()` 处理，并保留三次 VSYNC 等待。
-  局部绘制不意味着局部 DMA 扫描，也不意味着底层只写回脏区缓存。
-- 手势捕获固定 GT911 contact ID，不把拖动转移给第二根手指。空报告产生 Up；无新报告不等于松开。
-  超过 500 ms 无有效报告或原触点消失时发 Cancel，不合成点击，等全松开后重新接受按下。
+- 360×640 逻辑画布放大 2 倍，覆盖整个 720×1280 面板；触摸坐标反向缩放。
+- 核 1 独占 UI、触摸、显示；核 0 打印心跳。示例音量只是状态，不实际控制音频/背光。
+- 固定 PSRAM 双缓冲仍为 `720 * 1280 * 2 * 2 = 3,686,400` 字节，核 1 栈 32 KiB。
+- 沿用现有 RGB565→面板 BGR565 转换、`dpi.commit()` 缓存维护、三次 VSYNC 描述符重用等待。
+- 每次重绘当前逻辑脏区与上一次逻辑脏区的并集；两缓冲在启动时完整初始化。
+  局部绘制并不代表面板局部扫描或 DMA/cache 自动只处理脏区。
+- 固定跟踪一条 GT911 contact ID；空报告才发 Up。触点失联/换指/500 ms 无报告发 Cancel，
+  等全松开后重新接受输入。固件尚未接入实体键盘；主机按键是输入接口的示范。
 
-## 桌面与测试
+## 组件复用与业务事件
 
-主机预览、键盘输入以及测试均隔离在独立包中，不拉入板级依赖：
+在另一 crate 中依赖 `tiny-ui`，创建任意 viewport 的 `Scene<N>`，向其添加任意位置的组件。
+每个组件有用户指定 `WidgetId`；`scene.handle(Event)` 返回 `{ id, kind }`，
+业务层处理 `Clicked` / `ValueChanged` / `SelectionChanged`，不在控件内执行 Wi-Fi 或其他外设操作。
 
-```sh
-cd demos/rust-ui
-cargo test --target x86_64-unknown-linux-gnu
-cargo run --target x86_64-unknown-linux-gnu --features host --bin demo
-```
+业务层通过 `scene.update(id, ...)` 修改数值、文本、样式、可见性等；框架合并旧/新绘制范围。
+每个脏区域先恢复背景，再按层序重画组件和 popup。框架不拥有 framebuffer，
+只接受 `DrawTarget<Color = Rgb565>`；可接单缓冲、扫描输出或由应用管理 A/B 双缓冲。
 
-根目录 Cargo 配置默认交叉编译，所以运行主机命令时必须明确指定本机 target（上例为 Linux x86_64；
-其他主机请以 `rustc -vV` 的 host 为准）。桌面程序具体操作和验证项见
-[独立 demo 说明](../../demos/rust-ui/README.md)。这些命令中的键盘输入是主机 demo 能力，固件没有添加 USB 键盘输入。
+容量固定：Scene 组件上限由 const 泛型决定；Label 文本为 96 字节内联缓冲，超长按 UTF-8 边界截断；
+列表/下拉项为静态借用切片。容量/重复 ID 插入返回错误。未来需要动态数据源时可新增数据模型接口，
+不必让整个核心依赖 alloc。
 
-## 验证边界
+## 主机预览与验证边界
 
-主机测试检查滑条范围、按键焦点/激活、触摸取消和部分绘制与完整绘制的像素一致性，
-包括交替双缓冲历史修复。交叉编译只验证目标代码能构建，不证明面板颜色、触摸定位、
-缓存一致性、显示帧率或 USB 音频共存已在实机验证。此独立固件不启动音频/无线/USB 服务。
+[主机命令与测试](../../3rd/ui-demo/README.md)。Rust 负责逻辑和像素，浏览器只是输入/显示薄适配。
+本文图片来自实际 Rust 软件渲染输出，不是 Slint 截图，也不是硬件照片。
 
-2026-10-31 软件验证（Rust 1.99.1，Linux x86_64）：
-
-- `cargo check --release --bin rust_ui_demo`：通过。
-- `cargo build --release --locked --bin rust_ui_demo`：通过，包含 P4 目标链接。
-- 新固件文件 rustfmt、独立包 fmt：通过。
-- 独立包 `cargo test --target x86_64-unknown-linux-gnu --locked --all-features`：9 项通过。
-- 独立包同主机 target 的 Clippy（`--all-targets --all-features -- -D warnings`）：通过。
-- 本地主机 HTTP 帧/事件、滑条、焦点、重置、箭头输入 smoke：通过。
-- 实际面板/GT911、真实浏览器交互、时序/性能：未验证，不据软件测试推断实机成功。
+真实面板、GT911、cache/DMA 时序、显示帧率及 USB 音频/无线共存尚未在本次改动中实测。
+浏览器真实鼠标交互没有实机自动化验证；HTTP 适配往返与纯 Rust 交互测试不能替代这些测试。
+本固件不启动音频、无线或 USB 服务。软件验证记录见 [仓库验证记录](../REPOSITORY_LAYOUT.md)。

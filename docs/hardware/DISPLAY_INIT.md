@@ -1,14 +1,14 @@
 # ESP32-P4 点亮 MIPI 屏幕：当前实现总结
 
 整理日期：2026-10-24。以当前 `src/driver/display.rs`、
-`src/bin/apps/main.rs`、`src/bin/verify/verify_display.rs` 和本机 esp-hal 1.2.0
+`src/bin/apps/main.rs`、`src/bin/verify/verify_display.rs` 和本机 esp-hal 1.2.2
 源码为依据；本次仅核对代码与记录，没有重新烧录或进行硬件测量。
 
 ## 屏幕和关键参数
 
 | 项目 | 当前值 |
 | --- | --- |
-| 主控 / HAL | ESP32-P4，当前工程最低芯片版本 3.1（301）；esp-hal 固定 1.2.0 |
+| 主控 / HAL | ESP32-P4，当前工程最低芯片版本 3.1（301）；esp-hal 固定 1.2.2 |
 | 屏幕 | Waveshare 5-DSI-TOUCH-A，HX8394，720 × 1280 |
 | 板控 I2C | I2C1；SDA GPIO7，SCL GPIO8；板控地址 `0x45`，速率使用 HAL 默认配置 |
 | DSI | 2 条数据 lane，配置每 lane 700 Mbps；专用 D-PHY 引脚 |
@@ -44,7 +44,7 @@
    这是当前保留的两次 sleep-out 流程；`29` 打开面板显示。
 7. `drop(dbi)` 释放命令接口对总线的借用；检查帧缓冲长度及 64 字节对齐。
    调用 `bus.dpi(...)` 配置下表时序和 RGB888，交给 DMA 持续输出像素，
-   日志打印 `display: dpi streaming`，返回 DPI 与 I2C 句柄。
+   返回 DPI 与 I2C 句柄。
 8. 调用方保持 `_display` 存活。主程序随后初始化以太网任务；
    `verify_display` 进入等待循环，保留静态测试画面。
 
@@ -64,9 +64,6 @@
   据此推算刷新率约为 `1 / (14 μs × 1318) = 54.19 Hz`。
 
 这些是按当前源码推导的值，未做本次硬件寄存器回读或时钟测量。
-历史记录记载切换 PLL_F240M 后闪烁停止，HFP=52 后用户反馈显示正常；
-`DISPLAY_DEBUG.md` 后面的 A/B/A 小节保留了更早的待验证方案，应结合开头的最新记录阅读。
-
 ## 为什么请求 58 MHz 却得到 60 MHz，HFP=52 如何确定
 
 当前 HAL 路径只设置整数分频，没有为该请求配置小数分频：
@@ -96,14 +93,7 @@ Host 总行长   L = round(N × 87.5 / 58)，单位：87.5 MHz lane byte clock
 从原来的 N=800 往上找，最近的是 `116 × 7 = 812`，因此
 `HFP = 812 - 760 = 52`。这是当前时钟组合下方便的对齐候选值，
 并不说明 52 是面板唯一允许的值，也不说明所有其他值都不可能在舍入后对齐。
-历史调试记录先提出 40/52 的对照，之后记录用户反馈 52 显示正常；
-没有记录完整 A/B/A 复测或硬件寄存器回读。
-
-此前记录的“沿扫描方向逐行错位”，与这种每行产生小时间差、可能使
-Bridge/Host FIFO 供需相位逐步变化的机制相符。
-但 **0.342857 是每行时间差折合的像素时钟数，不是已测得的画面位移量**；
-不能直接断言每约三行必定错一个可见像素，也不能把它与当时目测的
-“约每四行错一个像素”当作精确吻合。
+该计算值不是实测画面位移，不能据此断言可见像素错位量。
 实际是否发生欠载、溢出、重同步及其如何表现，仍需状态寄存器或测量证据。
 
 因此，现有证据支持“消除两侧行周期舍入差是修复错位的强候选解释”，
@@ -157,10 +147,6 @@ cargo run --release --bin verify_display
 ```
 
 此命令会通过工程配置的 espflash runner 烧录并打开串口监视；本次总结没有执行它。
-正常初始化日志依次出现 `display: dphy ready`、`display: panel ready, fill`、
-`display: dpi streaming` 和 `verify_display: display ready`。
-其中 `panel ready, fill` 是已有日志文本，实际填图发生在调用方、早于 `display::init`。
-
 ## HX8394 initialization command reference
 
 This describes the current src/driver/display.rs, not a proposed new sequence.

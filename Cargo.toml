@@ -7,10 +7,10 @@ autobins = false
 default-run = "main"
 
 [dependencies]
-tiny-ui-demo = { path = "demos/rust-ui", default-features = false }
+tiny-ui-demo = { path = "3rd/ui-demo", default-features = false }
 embedded-graphics = "0.8.1"
 critical-section = "1.2.0"
-esp-hal = { version = "=1.2.0", default-features = false, features = [
+esp-hal = { version = "=1.2.2", default-features = false, features = [
     "esp32p4",
     "rt",
     "unstable",
@@ -138,8 +138,8 @@ keyboard-low-refresh = []
 usb-trace = ["embassy-usb/log", "dep:embassy-usb-synopsys-otg"]
 
 [patch.crates-io]
-esp-hal = { path = "vendor/esp-hal" }
-embassy-usb-synopsys-otg = { path = "vendor/embassy-usb-synopsys-otg" }
+esp-hal = { path = "3rd/esp-hal" }
+embassy-usb-synopsys-otg = { path = "3rd/embassy-usb-synopsys-otg" }
 
 [dependencies.embassy-usb-synopsys-otg]
 version = "=0.4.0"
