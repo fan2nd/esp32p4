@@ -61,7 +61,8 @@ fn main() -> ! {
 
     let state = AudioState::default();
     let mut control = Control::new(&state);
-    let mut ep_buffer = [0; 256];
+    // Includes the ISR's eight-packet isochronous OUT queue and EP0 buffer.
+    let mut ep_buffer = [0; 512];
     let mut usb_config = DriverConfig::default();
     // UAC1 uses 1 ms full-speed frames; HS playback is not validated on Windows.
     // The same J2 HS controller/PHY remains in use, limited to 12 Mbit/s.

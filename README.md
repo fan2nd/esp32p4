@@ -11,6 +11,9 @@ for the sequence, delays, panel commands, and clock/timing parameters.
 
 ## Notes
 
+- ESP32-P4 SDIO/MIPI coexistence requires serialized cache maintenance. This
+  workspace patches esp-hal locally; see [the verified fix and official references](doc/SDIO_MIPI_CACHE_FIX.md).
+
 - Hardware pinouts: [ESP32-P4-ETH (original board)](doc/pinout.md) and
   [ESP32-P4-NANO-WIFI6-DB (replacement board)](doc/pinout-nano-wifi6-db.md).
 
@@ -22,6 +25,13 @@ for the sequence, delays, panel commands, and clock/timing parameters.
 - The demo advertises `waveshare-p4-eth.local` and a small `_http._tcp.local` service.
 
 ## Flash
+
+`display_core1` runs display initialization, drawing and VDMA on the second core,
+while core 0 prints a heartbeat. See [the standalone dual-core display demo](doc/DISPLAY_CORE1.md).
+
+`wifi_ble` is the standalone Wi-Fi scan + BLE advertising demo, without display,
+USB or audio. See [build steps and hardware verification](doc/WIFI_BLE.md).
+Run `cargo run --release --bin wifi_ble` to flash and monitor it.
 
 The standalone `verify_hosted` binary runs the on-board C5 SDIO communication check
 in Rust, without initializing display, audio or Ethernet.
@@ -54,6 +64,10 @@ requirements, and artwork are described in
 Adjust the static IPv4 settings in `src/board.rs` if your LAN does not use `192.168.1.0/24`.
 
 ## Touchscreen macro keyboard
+
+The integrated `desktop` firmware combines USB keyboard/microphone/speaker,
+C5 Wi-Fi and Bluetooth initialization, and a whale-girl home screen. Display and
+touch run on the second core. See [desktop setup and validation status](doc/DESKTOP.md).
 
 `keyboard` provides eight large touch keys (2 columns × 4 rows), four layers,
 USB HID keyboard/media controls and VIA remapping. See [setup, VIA definition and

@@ -2,6 +2,8 @@
 runner = "espflash flash --monitor --chip esp32p4"
 
 [env]
+EMBASSY_USB_MAX_INTERFACE_COUNT = "8"
+EMBASSY_USB_MAX_HANDLER_COUNT = "8"
 ESP_LOG = "info"
 ESP_HAL_CONFIG_MIN_CHIP_REVISION = "301"
 

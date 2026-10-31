@@ -1,0 +1,138 @@
+PDF page 3359
+Chapter 57 SD/MMC Host Controller (SDHOST) GoBack
+Figure 57.7-1. Linked List Structure
+57.8 DMA Descriptor Format
+Each descriptor consists of four words as shown in57.8-1. Table57.8-1, Table57.8-2, Table57.8-3, Table57.8-4
+provide the descriptions of these four words.
+Figure 57.8-1. Descriptor Format
+The DES0 field contains control and status information.
+Table 57.8-1. DES0 Descriptor Field
+Bits Name Description
+31 OWNER
+When set to 1, this bit indicates that the descriptor
+is owned by the DMA Controller. When reset to 0, it
+indicates that the descriptor is owned by the host.
+The DMA clears this bit when it completes the data
+transfer.
+Espressif Systems 3359
+Submit Documentation Feedback
+ESP32-P4 TRM
+PRELIMINARY
+
+PDF page 3363
+Chapter 57 SD/MMC Host Controller (SDHOST) GoBack
+57.9.4 Initializing DMA Transmission
+To initialize DMA transmission, perform the following steps:
+1. The host sets up the descriptor fields (DES0-DES3) for transmission, and sets the OWNER bit (DES0[31])
+to 1. The host also prepares the data buffer.
+2. The host writes the write data command to the command registerSDHOST_CMD_REG.
+3. The host sets the required transmit threshold via theSDHOST_TX_WMARKfield in the
+SDHOST_FIFOTH_REGregister.
+4. The DMA Controller engine fetches the descriptor and checks the OWNER bit. If the OWNER bit is not
+set, it means that the host owns the descriptor. In this case, the DMA Controller enters a suspend state
+and asserts the Descriptor Unable interrupt via theSDHOST_IDSTS_REGregister. The host then needs to
+release the DMA Controller by writing any value toSDHOST_PLDMND_REG.
+5. The DMA Controller waits for the Command Done (CMDD) bit in theSDHOST_RINTSTS_REGregister to
+be set to 1 with no errors from BIU, which indicates that a transfer has completed.
+6. The DMA Controller engine waits for a DMA interface request from BIU. This request is generated based
+on the configured transmit threshold value. For the last byte of data that cannot be accessed using a
+burst, a single transfer is performed on the AHB bus.
+7. TheDMAControllerfetchesthetransmitdatafromthedatabufferin thehostmemory andtransfersthem
+to RAM in preparation for transmission to the card.
+8. When data span across multiple descriptors, the DMA Controller fetches the next descriptor and
+continues with its operation with the next descriptor. The Last Descriptor bit indicates whether the data
+span multiple descriptors or not.
+9. When data transmission is complete, the status information is updated in theSDHOST_IDSTS_REG
+register by setting theSDHOST_IDSTS_TIbit to 1 if it has already been enabled. Also, the OWNER bit is
+cleared by the DMA Controller by updating the DES0 field.
+57.9.5 Initializing DMA Reception
+To initialize DMA reception, perform the following steps:
+1. The host sets up the descriptor fields (DES0-DES3) for reception, and sets the OWNER bit (DES0[31]) to
+1.
+2. The host writes the read data command in theSDHOST_CMD_REGregister in BIU.
+3. The host sets the required receive threshold level via theSDHOST_RX_WMARKfield in the
+SDHOST_FIFOTH_REGregister.
+4. The DMA Controller engine fetches the descriptor and checks the OWNER bit. If the OWNER bit is not
+set, it means that the host owns the descriptor. In this case, the DMA enters suspend state and asserts
+the Descriptor Unable interrupt via theSDHOST_IDSTS_REGregister. The host then needs to release the
+DMA Controller by writing any value toSDHOST_PLDMND_REG.
+5. The DMA Controller waits for the Command Done (CMDD) bit in theSDHOST_RINTSTS_REGregister to
+be set to 1 with no errors from BIU, which indicates that a reception has been completed.
+Espressif Systems 3363
+Submit Documentation Feedback
+ESP32-P4 TRM
+PRELIMINARY
+
+PDF page 3389
+Chapter 57 SD/MMC Host Controller (SDHOST) GoBack
+Register 57.29. SDHOST_IDSTS_REG (0x008C)
+(reserved)
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+31 17
+SDHOST_IDSTS_FSM
+0x0
+16 13
+SDHOST_IDSTS_FBE_CODE
+0x0
+12 10
+SDHOST_IDSTS_AIS
+0
+9
+SDHOST_IDSTS_NIS
+0
+8
+(reserved)
+0 0
+7 6
+SDHOST_IDSTS_CES
+0
+5
+SDHOST_IDSTS_DU
+0
+4
+(reserved)
+0
+3
+SDHOST_IDSTS_FBE
+0
+2
+SDHOST_IDSTS_RI
+0
+1
+SDHOST_IDSTS_TI
+0
+0
+Reset
+SDHOST_IDSTS_TI The rawinterrupt statusof TransmitInterrupt. Indicates thatdatatransmission is
+finished for a descriptor. (R/W1C)
+SDHOST_IDSTS_RI The raw interrupt status of Receive Interrupt. Indicates the completion of data
+reception for a descriptor. (R/W1C)
+SDHOST_IDSTS_FBE The raw interrupt status of Fatal Bus Error Interrupt. Indicates that a Bus Error
+occurred (SDHOST_IDSTS_REG[12:10]). (R/W1C)
+SDHOST_IDSTS_DU TherawinterruptstatusofDescriptorUnavailableInterrupt. Thisbitissetwhen
+the descriptor is unavailable due to OWNER bit = 0 (DES0[31] = 0). (R/W1C)
+SDHOST_IDSTS_CES The raw interrupt status of Card Error Summary. Indicates the status of the
+transactionto/fromthecard,alsopresentinSDHOST_RINTSTS_REG.IndicatesthelogicalORof
+the following bits:
+EBE: End-bit error/no CRC error
+SBE/BCI: RX Start Bit Error
+DRTO: Data read timeout
+RTO: Response timeout
+DCRC: Data CRC error
+RCRC: Response CRC error
+RE: Response error
+TheabortconditionoftheDMAdependsonthesettingofthisfield. Ifthisfieldisenabled,then
+the DMA aborts on a response error. (R/W1C)
+SDHOST_IDSTS_NIS The raw interrupt status of Normal Interrupt Summary. Logical OR of SD-
+HOST_IDSTS_REG[1:0]. Only unmasked bits affect this bit. This is a sticky bit and must be
+cleared each time a corresponding bit that causes this field to be set is cleared by software.
+(R/W1C)
+SDHOST_IDSTS_AIS The raw interrupt status of Abnormal Interrupt Summary. Logical OR of SD-
+HOST_IDSTS_REG[2], SDHOST_IDSTS_REG[4]. Only unmasked bits affect this bit. This is a
+sticky bit and must be cleared each time a corresponding bit that causes this field to be set is
+cleared by software. (R/W1C)
+Continued on the next page...
+Espressif Systems 3389
+Submit Documentation Feedback
+ESP32-P4 TRM
+PRELIMINARY

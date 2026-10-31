@@ -1,0 +1,74 @@
+Final simultaneous-start firmware, 2026-10-31, COM6, P4 v3.1
+Patch: shared esp_sync::RawMutex around P4 ROM cache maintenance
+Air check: Bleak received 44:BD:8D:D0:A5:3E P4-WiFi-BLE
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=15 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=5 frames=28 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=42 updates/2s=14
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=55 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=68 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=81 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=94 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=107 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=120 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=5 frames=133 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=146 updates/2s=13
+[ProCpu] INFO - Wi-Fi: scan 1 OK, 16 APs (capacity 16)
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=159 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=173 updates/2s=14
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=186 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=199 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=212 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=5 frames=225 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=239 updates/2s=14
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=252 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=265 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=278 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=291 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=303 updates/2s=12
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=316 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=5 frames=328 updates/2s=12
+[ProCpu] INFO - coexist: core0 alive; core1 stage=5 frames=341 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=355 updates/2s=14
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=368 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=381 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=394 updates/2s=13
+[ProCpu] INFO - Wi-Fi: scan 2 OK, 16 APs (capacity 16)
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=407 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=420 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=433 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=447 updates/2s=14
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=460 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=473 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=5 frames=486 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=500 updates/2s=14
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=513 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=526 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=539 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=552 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=565 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=578 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=591 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=604 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=617 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=630 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=643 updates/2s=13
+[ProCpu] INFO - Wi-Fi: scan 3 OK, 16 APs (capacity 16)
+[ProCpu] INFO - coexist: core0 alive; core1 stage=5 frames=655 updates/2s=12
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=668 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=682 updates/2s=14
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=695 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=708 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=721 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=734 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=5 frames=747 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=760 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=773 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=5 frames=785 updates/2s=12
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=799 updates/2s=14
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=812 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=825 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=839 updates/2s=14
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=852 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=865 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=878 updates/2s=13
+[ProCpu] INFO - coexist: core0 alive; core1 stage=3 frames=891 updates/2s=13

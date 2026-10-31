@@ -1,0 +1,15 @@
+[package]
+name = "desktop-protocol-tests"
+version = "0.1.0"
+edition = "2024"
+[lib]
+path = "lib.rs"
+
+[dependencies]
+embassy-net-driver = "0.2.0"
+xarxa-driver = { git = "https://github.com/embassy-rs/xarxa", rev = "8f6f33b131deb9ff3290e0e01079537e1ed7b2ad" }
+embassy-net-esp-hosted = { git = "https://github.com/embassy-rs/embassy", rev = "cd5f2d0e695e69fa474bda27710094d91bd93aa4", features = ["esp-hosted-mcu"] }
+embassy-time = { version = "0.5.1", features = ["std", "generic-queue-8"] }
+critical-section = { version = "1.2", features = ["std"] }
+[patch."https://github.com/embassy-rs/embassy"]
+embassy-time = { version = "=0.5.1" }

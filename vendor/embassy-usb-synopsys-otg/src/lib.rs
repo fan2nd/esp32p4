@@ -108,11 +108,23 @@ pub unsafe fn on_interrupt(r: Otg, state: &State<'_>) {
             vals::Pktstsd::OUT_DATA_RX => {
                 trace!("OUT_DATA_RX ep={} len={}", ep_num, len);
 
-                if state.ep_states[ep_num].out_size.load(Ordering::Acquire) == EP_OUT_BUFFER_EMPTY {
+                let ep_state = &state.ep_states[ep_num];
+                let iso = ep_state.iso_enabled.load(Ordering::Acquire);
+                let head = ep_state.iso_head.load(Ordering::Relaxed);
+                let room = if iso {
+                    head.wrapping_sub(ep_state.iso_tail.load(Ordering::Acquire)) < ISO_OUT_SLOTS as u16
+                } else {
+                    ep_state.out_size.load(Ordering::Acquire) == EP_OUT_BUFFER_EMPTY
+                };
+                if room {
                     // SAFETY: Buffer size is allocated to be equal to endpoint's maximum packet size
                     // We trust the peripheral to not exceed its configured MPSIZ
-                    let buf =
-                        unsafe { core::slice::from_raw_parts_mut(*state.ep_states[ep_num].out_buffer.get(), len) };
+                    let offset = if iso {
+                        head as usize % ISO_OUT_SLOTS * state.ep_alloc_get(Direction::Out, ep_num).unwrap().max_packet_size as usize
+                    } else { 0 };
+                    let buf = unsafe {
+                        core::slice::from_raw_parts_mut((*ep_state.out_buffer.get()).add(offset), len)
+                    };
 
                     let mut chunks = buf.chunks_exact_mut(4);
                     for chunk in &mut chunks {
@@ -126,7 +138,12 @@ pub unsafe fn on_interrupt(r: Otg, state: &State<'_>) {
                         rem.copy_from_slice(&data.to_ne_bytes()[0..rem.len()]);
                     }
 
-                    state.ep_states[ep_num].out_size.store(len as u16, Ordering::Release);
+                    if iso {
+                        ep_state.iso_lengths[head as usize % ISO_OUT_SLOTS].store(len as u16, Ordering::Relaxed);
+                        ep_state.iso_head.store(head.wrapping_add(1), Ordering::Release);
+                    } else {
+                        ep_state.out_size.store(len as u16, Ordering::Release);
+                    }
                     state.ep_states[ep_num].out_waker.wake();
                 } else {
                     error!("ep_out buffer overflow index={}", ep_num);
@@ -205,6 +222,19 @@ pub unsafe fn on_interrupt(r: Otg, state: &State<'_>) {
                 if ep_ints.stup() {
                     state.cp_state.setup_ready.store(true, Ordering::Release);
                 }
+                if ep_ints.xfrc() && state.ep_states[ep_num].iso_enabled.load(Ordering::Acquire) {
+                    let ep = state.ep_alloc_get(Direction::Out, ep_num).unwrap();
+                    r.doeptsiz(ep_num).modify(|w| {
+                        w.set_xfrsiz(ep.max_packet_size as _);
+                        w.set_pktcnt(1);
+                    });
+                    let odd = r.dsts().read().fnsof() & 1 != 0;
+                    r.doepctl(ep_num).modify(|w| {
+                        if odd { w.set_sd0pid_sevnfrm(true); } else { w.set_soddfrm(true); }
+                        w.set_cnak(true);
+                        w.set_epena(true);
+                    });
+                }
                 state.ep_states[ep_num].out_waker.wake();
                 trace!("out ep={} irq val={:08x}", ep_num, ep_ints.0);
             }
@@ -262,6 +292,9 @@ impl PhyType {
 
 /// Indicates that [State::ep_out_buffers] is empty.
 const EP_OUT_BUFFER_EMPTY: u16 = u16::MAX;
+// Isochronous OUT cannot retry missed frames. Rearm it from the ISR and queue
+// packets in SRAM, so application polling need not meet every 1 ms deadline.
+const ISO_OUT_SLOTS: usize = 8;
 
 struct EpState {
     in_waker: AtomicWaker,
@@ -270,12 +303,19 @@ struct EpState {
     /// Buffers are ready when associated [State::ep_out_size] != [EP_OUT_BUFFER_EMPTY].
     out_buffer: UnsafeCell<*mut u8>,
     out_size: AtomicU16,
+    iso_head: AtomicU16,
+    iso_tail: AtomicU16,
+    iso_lengths: [AtomicU16; ISO_OUT_SLOTS],
+    iso_enabled: AtomicBool,
     // Written once during endpoint allocation (before Driver::start), read-only afterward.
     in_alloc: UnsafeCell<Option<EndpointData>>,
     out_alloc: UnsafeCell<Option<EndpointData>>,
 }
 
-// SAFETY: `out_buffer` access is synchronized via `out_size`. `in_alloc`/`out_alloc` are written
+// SAFETY: non-ISO `out_buffer` access is synchronized via `out_size`; ISO
+// slots use a single ISR producer/head and task consumer/tail with acquire/release.
+// Queue reset happens with interrupts masked while enabling the endpoint.
+// `in_alloc`/`out_alloc` are written
 // only during endpoint allocation before the USB stack starts; afterward they are read-only.
 unsafe impl Send for EpState {}
 unsafe impl Sync for EpState {}
@@ -387,6 +427,10 @@ impl<const EP_COUNT: usize> StateStorage<EP_COUNT> {
                     out_waker: AtomicWaker::new(),
                     out_buffer: UnsafeCell::new(0 as _),
                     out_size: AtomicU16::new(EP_OUT_BUFFER_EMPTY),
+                    iso_head: AtomicU16::new(0),
+                    iso_tail: AtomicU16::new(0),
+                    iso_lengths: [const { AtomicU16::new(0) }; ISO_OUT_SLOTS],
+                    iso_enabled: AtomicBool::new(false),
                     in_alloc: UnsafeCell::new(None),
                     out_alloc: UnsafeCell::new(None),
                 }
@@ -502,8 +546,10 @@ impl<'d> Driver<'d> {
             D::dir()
         );
 
+        let out_bytes = max_packet_size as usize
+            * if ep_type == EndpointType::Isochronous { ISO_OUT_SLOTS } else { 1 };
         if D::dir() == Direction::Out {
-            if self.ep_out_buffer_offset + max_packet_size as usize > self.ep_out_buffer.len() {
+            if self.ep_out_buffer_offset + out_bytes > self.ep_out_buffer.len() {
                 error!("Not enough endpoint out buffer capacity");
                 return Err(EndpointAllocError);
             }
@@ -577,7 +623,7 @@ impl<'d> Driver<'d> {
             unsafe {
                 *ep_state.out_buffer.get() = self.ep_out_buffer.as_mut_ptr().offset(self.ep_out_buffer_offset as _);
             }
-            self.ep_out_buffer_offset += max_packet_size as usize;
+            self.ep_out_buffer_offset += out_bytes;
         }
 
         Ok(Endpoint {
@@ -850,6 +896,8 @@ impl<'d> Bus<'d> {
         // Unmask SETUP received EP interrupt
         r.doepmsk().write(|w| {
             w.set_stupm(true);
+            // ISO OUT is rearmed on transfer completion, not by the consumer.
+            w.set_xfrcm(true);
         });
 
         // Unmask and clear core interrupts
@@ -1113,6 +1161,7 @@ impl<'d> embassy_usb_driver::Bus for Bus<'d> {
         match ep_addr.direction() {
             Direction::Out => {
                 critical_section::with(|_| {
+                    st.ep_states[ep_addr.index()].iso_enabled.store(false, Ordering::Release);
                     regs.doepctl(ep_addr.index()).modify(|w| {
                         w.set_stall(stalled);
                     });
@@ -1188,6 +1237,10 @@ impl<'d> embassy_usb_driver::Bus for Bus<'d> {
                     // Without this, the endpoint stays idle after reconnect and silently drops data.
                     if enabled && ep_addr.index() != 0 {
                         if let Some(ep) = st.ep_alloc_get(Direction::Out, ep_addr.index()) {
+                            let state = &st.ep_states[ep_addr.index()];
+                            state.iso_head.store(0, Ordering::Relaxed);
+                            state.iso_tail.store(0, Ordering::Relaxed);
+                            state.iso_enabled.store(ep.ep_type == EndpointType::Isochronous, Ordering::Release);
                             regs.doeptsiz(ep_addr.index()).modify(|w| {
                                 w.set_xfrsiz(ep.max_packet_size as _);
                                 w.set_pktcnt(1);
@@ -1364,6 +1417,24 @@ impl<'d> embassy_usb_driver::EndpointOut for Endpoint<'d, Out> {
                 return Poll::Ready(Err(EndpointError::Disabled));
             }
 
+            if self.info.ep_type == EndpointType::Isochronous {
+                let tail = self.state.iso_tail.load(Ordering::Relaxed);
+                if tail == self.state.iso_head.load(Ordering::Acquire) {
+                    return Poll::Pending;
+                }
+                let slot = tail as usize % ISO_OUT_SLOTS;
+                let len = self.state.iso_lengths[slot].load(Ordering::Relaxed) as usize;
+                let result = if len <= buf.len() {
+                    // ISR owns head; the reader owns tail. Release tail only
+                    // after copying, so the producer cannot reuse this slot.
+                    let data = unsafe { core::slice::from_raw_parts(
+                        (*self.state.out_buffer.get()).add(slot * self.info.max_packet_size as usize), len) };
+                    buf[..len].copy_from_slice(data);
+                    Ok(len)
+                } else { Err(EndpointError::BufferOverflow) };
+                self.state.iso_tail.store(tail.wrapping_add(1), Ordering::Release);
+                return Poll::Ready(result);
+            }
             let len = self.state.out_size.load(Ordering::Acquire);
             if len != EP_OUT_BUFFER_EMPTY {
                 trace!("read ep={:?} done len={}", self.info.addr, len);

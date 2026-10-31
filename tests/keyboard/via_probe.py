@@ -8,8 +8,9 @@ import hid
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--roundtrip", action="store_true")
+parser.add_argument("--pid", type=lambda value: int(value, 0), default=0x4013)
 args = parser.parse_args()
-devices = [d for d in hid.enumerate(0xCAFE, 0x4013)
+devices = [d for d in hid.enumerate(0xCAFE, args.pid)
            if d["usage_page"] == 0xFF60 and d["usage"] == 0x61]
 if len(devices) != 1:
     raise SystemExit(f"Expected one P4 VIA interface, found {len(devices)}")

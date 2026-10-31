@@ -67,12 +67,12 @@ impl<'a> Control<'a> {
 impl Handler for Control<'_> {
     fn reset(&mut self) {
         #[cfg(target_arch = "riscv32")]
-        esp_println::println!("usb_audio: USB bus reset");
+        crate::diagnostic!("usb_audio: USB bus reset");
         self.state.reset();
     }
     fn configured(&mut self, configured: bool) {
         #[cfg(target_arch = "riscv32")]
-        esp_println::println!("usb_audio: USB configured={}", configured);
+        crate::diagnostic!("usb_audio: USB configured={}", configured);
         if !configured {
             self.state.reset();
         }
@@ -84,7 +84,7 @@ impl Handler for Control<'_> {
     }
     fn set_alternate_setting(&mut self, interface: InterfaceNumber, alt: u8) {
         #[cfg(target_arch = "riscv32")]
-        esp_println::println!("usb_audio: interface={} alt={}", u8::from(interface), alt);
+        crate::diagnostic!("usb_audio: interface={} alt={}", u8::from(interface), alt);
         if u8::from(interface) == self.speaker_interface {
             self.state.playing.set(alt == 1);
             self.state.playback.borrow_mut().clear();

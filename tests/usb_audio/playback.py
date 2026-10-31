@@ -32,6 +32,7 @@ class Header(c.Structure):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seconds", type=float, default=3)
+    parser.add_argument("--device", default="P4 USB", help="Audio endpoint name substring")
     args = parser.parse_args()
     if not 0 < args.seconds <= 30:
         parser.error("seconds must be in (0, 30]")
@@ -41,7 +42,7 @@ if __name__ == "__main__":
         caps = Caps()
         if api.waveOutGetDevCapsW(index, c.byref(caps), c.sizeof(caps)) == 0:
             print(index, caps.name, flush=True)
-            if "P4 USB" in caps.name:
+            if args.device in caps.name:
                 devices.append(index)
     if len(devices) != 1:
         raise SystemExit(f"Expected one P4 output, found {devices}")

@@ -142,8 +142,8 @@ pub fn init(
     esp_hal::mipi_dsi::dpi::DsiDpi<'static>,
     I2c<'static, Blocking>,
 ) {
-    esp_println::println!("display: power i2c");
-    esp_println::println!("display: i2c peripheral ready");
+    crate::diagnostic!("display: power i2c");
+    crate::diagnostic!("display: i2c peripheral ready");
     // Board controller at 0x45, not HX8394 DCS: reproduce Waveshare's
     // register 0x95 sequence. Individual control bits are not verified here.
     i2c.write(0x45, &[0x95, 0x11])
@@ -158,7 +158,7 @@ pub fn init(
     i2c.write(0x45, &[0x96, 0xFF])
         .expect("panel I2C write failed");
     Delay::new().delay_millis(1000);
-    esp_println::println!("display: i2c ready, init dphy");
+    crate::diagnostic!("display: i2c ready, init dphy");
 
     let mut bus = MipiDsi::new(
         dsi,
@@ -168,7 +168,7 @@ pub fn init(
             .with_lane_bit_rate_mbps(700.0),
     )
     .expect("MIPI DSI init failed");
-    esp_println::println!("display: dphy ready");
+    crate::diagnostic!("display: dphy ready");
 
     let delay = Delay::new();
     let mut dbi = bus.dbi(0);
@@ -186,7 +186,7 @@ pub fn init(
     // SETMIPI: initial two-lane panel setup, later expanded by the vendor table.
     dbi.write_cmd(0xBA, &[0x61]).expect("DSI lane setup failed");
     for &(cmd, params) in HX8394_VENDOR_INIT {
-        esp_println::println!("display: cmd {:02x}", cmd);
+        crate::diagnostic!("display: cmd {:02x}", cmd);
         dbi.write_cmd(cmd, params).expect("HX8394 init failed");
         // Sleep/display delays follow Waveshare; ordinary commands receive
         // an extra 1 ms here (their vendor-table delay is zero).
@@ -205,7 +205,7 @@ pub fn init(
     delay.delay_millis(80);
     // Panel commands are complete; release the DBI borrow of the bus.
     drop(dbi);
-    esp_println::println!("display: panel ready, fill");
+    crate::diagnostic!("display: panel ready, fill");
 
     // The DSI DMA continuously scans one frame; a second equally sized frame
     // enables back-buffer drawing without changing the panel's wire format.
@@ -229,6 +229,6 @@ pub fn init(
         bus.dpi(config, &[front, back])
     }
     .expect("MIPI DPI init failed");
-    esp_println::println!("display: dpi streaming");
+    crate::diagnostic!("display: dpi streaming");
     (dpi, i2c)
 }
