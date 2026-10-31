@@ -139,8 +139,14 @@ impl defmt::Format for DmaDescriptorFlags {
 /// A DMA transfer descriptor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[cfg_attr(soc_has_axi_gdma, repr(C, align(8)))]
-#[cfg_attr(not(soc_has_axi_gdma), repr(C, align(4)))]
+// P4 internal RAM is L1-cacheable. A streaming descriptor's ownership is
+// updated by DMA while the CPU recycles other descriptors. Sharing a cache
+// line lets a CPU writeback overwrite the neighbour's newer DMA status.
+// Keep each descriptor in its own line; the hardware follows `next` pointers,
+// so padding does not change the three-word descriptor wire layout.
+#[cfg_attr(esp32p4, repr(C, align(64)))]
+#[cfg_attr(all(not(esp32p4), soc_has_axi_gdma), repr(C, align(8)))]
+#[cfg_attr(all(not(esp32p4), not(soc_has_axi_gdma)), repr(C, align(4)))]
 pub struct DmaDescriptor {
     /// Descriptor flags.
     pub flags: DmaDescriptorFlags,
@@ -153,6 +159,16 @@ pub struct DmaDescriptor {
     /// This field can only point to internal RAM.
     pub next: *mut DmaDescriptor,
 }
+
+#[cfg(esp32p4)]
+const _: () = {
+    // Padding must isolate cache lines without moving hardware-visible words.
+    assert!(core::mem::size_of::<DmaDescriptor>() == 64);
+    assert!(core::mem::align_of::<DmaDescriptor>() == 64);
+    assert!(core::mem::offset_of!(DmaDescriptor, flags) == 0);
+    assert!(core::mem::offset_of!(DmaDescriptor, buffer) == 4);
+    assert!(core::mem::offset_of!(DmaDescriptor, next) == 8);
+};
 
 impl DmaDescriptor {
     /// An empty DMA descriptor used to initialize the descriptor list.

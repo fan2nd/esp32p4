@@ -27,6 +27,11 @@ const INK: Rgb888 = Rgb888::new(24, 45, 68);
 const ACCENT: Rgb888 = Rgb888::new(38, 145, 181);
 const IMAGE: &[u8; 700 * 653 * 3] = include_bytes!("../assets/whale-girl-wave-large.rgb");
 const CJK: &[u8] = include_bytes!("../assets/cjk16.bin");
+const STRIP_HEIGHT: usize = 32;
+// Core 1 exclusively owns this scratch buffer. Static SRAM avoids overflowing
+// its 64 KiB stack and reduces repeated widget rasterization across strips.
+static STRIP: static_cell::StaticCell<[u8; 360 * STRIP_HEIGHT * 3]> =
+    static_cell::StaticCell::new();
 
 #[derive(Clone, Copy, PartialEq)]
 enum Page {
@@ -35,6 +40,7 @@ enum Page {
     Password,
     Keyboard,
 }
+#[derive(Clone)]
 struct Ui {
     page: Page,
     list_page: usize,
@@ -47,8 +53,8 @@ struct Ui {
 }
 fn button(canvas: &mut Canvas<'_>, rect: Rectangle, label: &str, active: bool) {
     // Render only widgets intersecting this internal-RAM strip. Otherwise each
-    // rounded button is rasterized forty times for a single full-screen draw.
-    if rect.top_left.y >= canvas.1 + 16
+    // rounded button is rasterized again for every strip in the screen.
+    if rect.top_left.y >= canvas.1 + STRIP_HEIGHT as i32
         || rect.top_left.y + rect.size.height as i32 <= canvas.1
     {
         return;
@@ -77,7 +83,7 @@ fn label(canvas: &mut Canvas<'_>, text: &str, p: Point, small: bool) {
         MonoTextStyle::new(if small { &FONT_6X10 } else { &FONT_10X20 }, INK),
     );
     let bounds = text.bounding_box();
-    if bounds.top_left.y < canvas.1 + 16
+    if bounds.top_left.y < canvas.1 + STRIP_HEIGHT as i32
         && bounds.top_left.y + bounds.size.height as i32 > canvas.1
     {
         text.draw(canvas).unwrap();
@@ -85,7 +91,7 @@ fn label(canvas: &mut Canvas<'_>, text: &str, p: Point, small: bool) {
 }
 fn ssid(canvas: &mut Canvas<'_>, value: &str, p: Point) {
     // Both the CJK glyph and ASCII font fit inside this baseline envelope.
-    if p.y - 20 >= canvas.1 + 16 || p.y + 5 <= canvas.1 {
+    if p.y - 20 >= canvas.1 + STRIP_HEIGHT as i32 || p.y + 5 <= canvas.1 {
         return;
     }
     let mut x = p.x;
@@ -171,7 +177,7 @@ fn draw(canvas: &mut Canvas<'_>, ui: &Ui, view: &View, map: &Keymap, now: u64) {
         // Sample the existing 700x653 illustration at 2:1 logical resolution;
         // panel scaling restores 700x652 native pixels without allocating an image.
         let start = canvas.1.max(170);
-        let end = (canvas.1 + 16).min(496);
+        let end = (canvas.1 + STRIP_HEIGHT as i32).min(496);
         for y in start..end {
             for x in 0..350 {
                 let i = (((y - 170) as usize * 2) * 700 + x * 2) * 3;
@@ -328,18 +334,22 @@ fn draw(canvas: &mut Canvas<'_>, ui: &Ui, view: &View, map: &Keymap, now: u64) {
     }
 }
 
-async fn render(fb: &mut [u8], ui: &Ui, view: &View, map: &Keymap, now: u64, full: bool) {
-    let mut strip = [0; 360 * 16 * 3];
+async fn render(
+    fb: &mut [u8],
+    strip: &mut [u8],
+    ui: &Ui,
+    view: &View,
+    map: &Keymap,
+    now: u64,
+    rows: core::ops::Range<usize>,
+) {
     let mut row = [0u32; 360];
-    for y in (0..640).step_by(16) {
-        if !full && y >= 112 {
-            break;
-        }
+    for y in (rows.start / STRIP_HEIGHT * STRIP_HEIGHT..rows.end).step_by(STRIP_HEIGHT) {
         for p in strip.chunks_exact_mut(3) {
             p.copy_from_slice(&[BG.r(), BG.g(), BG.b()]);
         }
-        draw(&mut Canvas(&mut strip, y), ui, view, map, now);
-        for line in 0..16 {
+        draw(&mut Canvas(strip, y as i32), ui, view, map, now);
+        for line in 0..STRIP_HEIGHT {
             for x in 0..360 {
                 let i = (line * 360 + x) * 3;
                 let c = ((strip[i + 2] as u16 >> 3) << 11)
@@ -352,11 +362,12 @@ async fn render(fb: &mut [u8], ui: &Ui, view: &View, map: &Keymap, now: u64, ful
                 // Static PSRAM frame and each row are aligned and exclusively
                 // owned by this core until the frame has been committed.
                 unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        row.as_ptr(),
-                        fb.as_mut_ptr().add(offset).cast::<u32>(),
-                        360,
-                    );
+                    let target = fb.as_mut_ptr().add(offset).cast::<u32>();
+                    // Preserve aligned word access instead of lowering to ROM
+                    // memcpy, whose access width is outside this renderer's control.
+                    for (x, &word) in row.iter().enumerate() {
+                        target.add(x).write_volatile(word);
+                    }
                 }
             }
         }
@@ -386,7 +397,8 @@ pub fn run(
         pressed: 0,
     };
     let (view, map) = desktop::with(|s| (s.view.clone(), s.keymap.clone()));
-    embassy_futures::block_on(render(&mut fb[..SIZE], &ui, &view, &map, 0, true));
+    let strip = STRIP.init_with(|| [0; 360 * STRIP_HEIGHT * 3]);
+    embassy_futures::block_on(render(&mut fb[..SIZE], strip, &ui, &view, &map, 0, 0..640));
     let (a, b) = fb.split_at_mut(SIZE);
     b.copy_from_slice(a);
     let (mut dpi, mut i2c) = display::init(
@@ -411,14 +423,18 @@ pub fn run(
         esp_hal::system::Cpu::current()
     );
     let mut touch = Gt911::probe(&mut i2c);
-    log::info!("desktop: touch probe complete ready={}",touch.is_some());
+    log::info!("desktop: touch probe complete ready={}", touch.is_some());
     let mut last_probe = 0;
     let mut last_touch = 0;
     let mut down = false;
     let mut revision = u32::MAX;
     let mut map_revision = u32::MAX;
     let mut shown_second = 0;
-    let mut repair_full = false;
+    // Track what each physical framebuffer contains, not just the last frame
+    // displayed. Otherwise partial updates can resurrect stale key highlights.
+    let mut drawn_ui = [ui.clone(), ui.clone()];
+    let mut drawn_map = [map.revision; 2];
+    let mut back_index = 1;
     let mut held = [0u16; 8];
     let mut base_layer = 0usize;
     let mut old_mask = 0;
@@ -435,10 +451,14 @@ pub fn run(
             last_probe = now;
             touch = Gt911::probe(&mut i2c);
         }
-        if revision == u32::MAX { log::info!("desktop: before touch poll"); }
+        if revision == u32::MAX {
+            log::info!("desktop: before touch poll");
+        }
         let points = touch.as_mut().and_then(|t| t.poll(&mut i2c));
         let (view, map) = desktop::with(|s| (s.view.clone(), s.keymap.clone()));
-        if revision == u32::MAX { log::info!("desktop: shared snapshot ready"); }
+        if revision == u32::MAX {
+            log::info!("desktop: shared snapshot ready");
+        }
         let mut mask = old_mask;
         if let Some(points) = points {
             last_touch = now;
@@ -665,17 +685,46 @@ pub fn run(
         {
             let draw_started = Instant::now();
             log::debug!("desktop: draw begin");
-            let full = changed || ui.page != Page::Home;
+            let previous = &drawn_ui[back_index];
+            let rows = if ui.page != previous.page {
+                0..640
+            } else {
+                match ui.page {
+                    Page::Home => 0..128,
+                    Page::Settings => 112..592,
+                    Page::Password => {
+                        if ui.shift != previous.shift || ui.symbols != previous.symbols {
+                            96..512
+                        } else if ui.selected_ssid != previous.selected_ssid {
+                            64..160
+                        } else {
+                            96..160
+                        }
+                    }
+                    Page::Keyboard => {
+                        if ui.layer != previous.layer || map.revision != drawn_map[back_index] {
+                            64..592
+                        } else {
+                            let mask = ui.pressed ^ previous.pressed;
+                            let mut rows = 640..0;
+                            for key in 0..8 {
+                                if mask & (1 << key) != 0 {
+                                    let rect = key_rect(key);
+                                    rows.start = rows.start.min(rect.top_left.y as usize);
+                                    rows.end = rows
+                                        .end
+                                        .max(rect.top_left.y as usize + rect.size.height as usize);
+                                }
+                            }
+                            rows
+                        }
+                    }
+                }
+            };
+            // Even if the back buffer already matches (e.g. key release), it
+            // must still be presented to replace a highlighted front buffer.
             embassy_futures::block_on(async {
-                render(
-                    dpi.framebuffer_mut(),
-                    &ui,
-                    &view,
-                    &map,
-                    second,
-                    full || repair_full,
-                )
-                .await;
+                render(dpi.framebuffer_mut(), strip, &ui, &view, &map, second, rows).await;
                 let rendered = Instant::now();
                 dpi.commit();
                 let committed = Instant::now();
@@ -683,13 +732,17 @@ pub fn run(
                     dpi.wait_for_vsync_async().await;
                 }
                 if changed {
-                    log::info!("desktop: frame render={}ms flush={}ms total={}ms",
+                    log::info!(
+                        "desktop: frame render={}ms flush={}ms total={}ms",
                         (rendered - draw_started).as_millis(),
                         (committed - rendered).as_millis(),
-                        (Instant::now() - draw_started).as_millis());
+                        (Instant::now() - draw_started).as_millis()
+                    );
                 }
             });
-            repair_full = full;
+            drawn_ui[back_index] = ui.clone();
+            drawn_map[back_index] = map.revision;
+            back_index ^= 1;
             revision = view.revision;
             map_revision = map.revision;
             shown_second = second;
@@ -697,7 +750,7 @@ pub fn run(
         esp_hal::delay::Delay::new().delay_millis(8);
     }
 }
-// A 16-row logical strip lives in internal RAM. Never issue individual pixel
+// A logical strip lives in internal RAM. Never issue individual pixel
 // stores into PSRAM: uncached byte writes can block USB for several seconds.
 struct Canvas<'a>(&'a mut [u8], i32);
 impl OriginDimensions for Canvas<'_> {
@@ -709,7 +762,10 @@ impl DrawTarget for Canvas<'_> {
     type Color = Rgb888;
     type Error = Infallible;
     fn fill_solid(&mut self, area: &Rectangle, color: Rgb888) -> Result<(), Infallible> {
-        let clipped = area.intersection(&Rectangle::new(Point::new(0, self.1), Size::new(360, 16)));
+        let clipped = area.intersection(&Rectangle::new(
+            Point::new(0, self.1),
+            Size::new(360, STRIP_HEIGHT as u32),
+        ));
         for y in clipped.top_left.y..clipped.top_left.y + clipped.size.height as i32 {
             let start = ((y - self.1) as usize * 360 + clipped.top_left.x as usize) * 3;
             for pixel in self.0[start..start + clipped.size.width as usize * 3].chunks_exact_mut(3)
@@ -724,7 +780,7 @@ impl DrawTarget for Canvas<'_> {
         pixels: I,
     ) -> Result<(), Infallible> {
         for Pixel(p, c) in pixels {
-            if !(0..360).contains(&p.x) || !(self.1..self.1 + 16).contains(&p.y) {
+            if !(0..360).contains(&p.x) || !(self.1..self.1 + STRIP_HEIGHT as i32).contains(&p.y) {
                 continue;
             }
             let i = ((p.y - self.1) as usize * 360 + p.x as usize) * 3;

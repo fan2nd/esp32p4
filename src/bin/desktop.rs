@@ -51,7 +51,7 @@ unsafe extern "C" fn ExceptionHandler(_frame: *mut u32) -> ! {
 use static_cell::StaticCell;
 use waveshare_p4_eth::driver::{
     audio::Es8311,
-    usb_audio::{self, AudioState, Control, MAX_PACKET, TARGET},
+    usb_audio::{self, AudioState, Control, MAX_PACKET},
 };
 use waveshare_p4_eth::{desktop, desktop_ui, keyboard::Keymap};
 
@@ -59,6 +59,9 @@ esp_bootloader_esp_idf::esp_app_desc!();
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 static SCREEN_STACK: StaticCell<Stack<65536>> = StaticCell::new();
 static SDHOST: StaticCell<SdHostController<'static>> = StaticCell::new();
+// Composite UI workloads can delay a poll by 3-5 ms. Keep 8 ms of USB PCM
+// queued before consuming it; 4 ms left no margin for a delayed packet batch.
+const TARGET: usize = 128;
 
 #[entry]
 fn main() -> ! {

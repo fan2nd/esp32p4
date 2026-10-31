@@ -7,6 +7,11 @@ does not depend on modifying a developer's Cargo registry cache.
 
 ## Changes
 
+- `src/dma/mod.rs`: P4 DMA descriptors each occupy one 64-byte internal-RAM
+  cache line. This avoids CPU recycling writeback overwriting a neighbouring
+  descriptor concurrently updated by DMA. Compile-time assertions preserve
+  hardware word offsets 0/4/8. See `doc/AUDIO_DMA_CACHE_FIX.md` for validation.
+
 - `src/soc/esp32p4/mod.rs`: one `esp_sync::RawMutex` serializes all three address
   cache-maintenance entry points. The critical region covers the entire ROM
   call; it protects against both the other core and local interrupts.

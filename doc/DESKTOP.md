@@ -1,6 +1,8 @@
 # 双核桌面固件：复合 USB、Wi-Fi 与蓝牙状态
 
-当前集成故障与后续职责划分见 [框架梳理及双核日志审查](DESKTOP_ARCHITECTURE.md)。
+核心职责划分见 [框架梳理及双核日志审查](DESKTOP_ARCHITECTURE.md)。
+最新音频 DMA 缓存隔离修复与触摸优化见 [本轮验证记录](AUDIO_DMA_CACHE_FIX.md)；
+下方排查过程保留历史现象，不代表最新固件仍持续发生这些故障。
 
 `desktop` 是集成固件，保留独立的 `keyboard`、`usb_audio`、`verify_hosted`
 例程，全部应用与驱动实现仍为 Rust。使用已经在 C5 上运行的 ESP-Hosted MCU
