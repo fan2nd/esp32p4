@@ -8,11 +8,13 @@ use embedded_graphics::{
     },
     pixelcolor::Rgb565,
     prelude::*,
-    primitives::{Circle, Line, PrimitiveStyle, Rectangle},
+    primitives::Rectangle,
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use heapless::{String, Vec};
-use tiny_ui::{ActionKind, Button, Event, ListView, Panel, Scene, Style, Widget};
+use tiny_ui::{
+    ActionKind, AlphaIcon, Button, Event, ListView, Panel, Scene, Slider, Style, Widget,
+};
 pub const WIDTH: u32 = 360;
 pub const HEIGHT: u32 = 640;
 const WHALE: &[u8] = include_bytes!("../assets/whale-girl-wave-large.rgb");
@@ -26,6 +28,13 @@ const DISCONNECT: u16 = 5;
 const CONNECT: u16 = 6;
 const NETWORKS: u16 = 7;
 const TYPING: u16 = 100;
+const WIFI_SETTINGS: u16 = 30;
+const BLE_SETTINGS: u16 = 31;
+const BRIGHTNESS_SETTINGS: u16 = 32;
+const VOLUME_SETTINGS: u16 = 33;
+const SETTING_SLIDER: u16 = 34;
+// Keep existing page IDs stable for macro-key dispatch; 4 is the settings root.
+
 fn rect(x: i32, y: i32, w: u32, h: u32) -> Rectangle {
     Rectangle::new(Point::new(x, y), Size::new(w, h))
 }
@@ -46,7 +55,7 @@ fn style() -> Style {
         background: Rgb565::WHITE,
         foreground: ink(),
         accent: accent(),
-        border: rgb(0xcd, 0xe4, 0xef),
+        border: rgb(0x75, 0xa6, 0xba),
         pressed: rgb(0xc1, 0xea, 0xfa),
         radius: 8,
         padding: 4,
@@ -61,6 +70,9 @@ pub struct Network {
     pub secure: bool,
 }
 pub enum Action {
+    Brightness(u8),
+    Volume(u8),
+    BleName(String<24>),
     Scan,
     Disconnect,
     Connect {
@@ -83,6 +95,11 @@ pub struct Ui {
     usb: bool,
     macro_labels: [String<24>; 8],
     pressed: u8,
+    brightness: u8,
+    volume: u8,
+    ble_name: String<24>,
+    settings_message: String<96>,
+    ble_status_seen: String<96>,
 }
 impl Default for Ui {
     fn default() -> Self {
@@ -106,6 +123,11 @@ impl Ui {
             usb: false,
             macro_labels: core::array::from_fn(|_| String::new()),
             pressed: 0,
+            brightness: 100,
+            volume: 100,
+            ble_name: String::try_from("P4 Desktop").unwrap(),
+            settings_message: String::new(),
+            ble_status_seen: String::new(),
         };
         v.rebuild();
         v
@@ -154,14 +176,22 @@ impl Ui {
                 self.scene.add(list).unwrap();
                 self.button(DISCONNECT, rect(12, 542, 336, 44), "DISCONNECT");
             }
-            2 => {
+            2 | 5 => {
                 let mut panel = Panel::new(8, rect(12, 112, 336, 52));
                 panel.base.style = style();
                 self.scene.add(panel).unwrap();
                 for (i, k) in password_keyboard::layout().iter().enumerate() {
                     self.button(TYPING + i as u16, typing_bounds(k), "");
                 }
-                self.button(CONNECT, rect(12, 542, 336, 50), "CONNECT");
+                self.button(
+                    CONNECT,
+                    rect(12, 542, 336, 50),
+                    if self.page == 5 {
+                        "APPLY NAME"
+                    } else {
+                        "CONNECT"
+                    },
+                );
             }
             3 => {
                 for k in 0..8 {
@@ -177,27 +207,72 @@ impl Ui {
                     self.scene.add(p).unwrap();
                 }
             }
+            4 => {
+                for (id, y, title) in [
+                    (WIFI_SETTINGS, 90, "Wi-Fi connection"),
+                    (BLE_SETTINGS, 190, "Bluetooth name"),
+                    (BRIGHTNESS_SETTINGS, 290, "Screen brightness"),
+                    (VOLUME_SETTINGS, 390, "Playback volume"),
+                ] {
+                    self.button(id, rect(16, y, 328, 72), title);
+                }
+            }
+            6 | 7 => {
+                let (min, value) = if self.page == 6 {
+                    (5, self.brightness)
+                } else {
+                    (0, self.volume)
+                };
+                let mut slider = Slider::new(
+                    SETTING_SLIDER,
+                    rect(24, 210, 312, 64),
+                    min,
+                    100,
+                    1,
+                    i32::from(value),
+                );
+                slider.base.style = style();
+                self.scene.add(slider).unwrap();
+            }
             _ => {}
         }
     }
     pub fn navigate(&mut self, page: u8) -> Option<Action> {
-        if page > 3 {
+        if page > 7 {
             return None;
         }
         self.password.clear();
         self.busy = false;
         self.page = page;
+        self.settings_message.clear();
+        if page == 5 {
+            let _ = self.password.text.push_str(&self.ble_name);
+            self.ble_status_seen.clear();
+        }
         self.rebuild();
         if page == 1 { Some(Action::Scan) } else { None }
     }
     pub fn handle(&mut self, event: Event) -> Option<Action> {
         if event == Event::KeyDown(tiny_ui::Key::Escape) {
-            return self.navigate(if self.page == 2 { 1 } else { 0 });
+            return self.navigate(self.parent_page());
         }
         let action = self.scene.handle(event)?;
         match (action.id, action.kind) {
-            (BACK, ActionKind::Clicked) => self.navigate(if self.page == 2 { 1 } else { 0 }),
-            (SETTINGS, ActionKind::Clicked) => self.navigate(1),
+            (BACK, ActionKind::Clicked) => self.navigate(self.parent_page()),
+            (SETTINGS, ActionKind::Clicked) => self.navigate(4),
+            (WIFI_SETTINGS, ActionKind::Clicked) => self.navigate(1),
+            (BLE_SETTINGS, ActionKind::Clicked) => self.navigate(5),
+            (BRIGHTNESS_SETTINGS, ActionKind::Clicked) => self.navigate(6),
+            (VOLUME_SETTINGS, ActionKind::Clicked) => self.navigate(7),
+            (SETTING_SLIDER, ActionKind::ValueChanged(value)) => {
+                self.invalidate(rect(24, 140, 312, 50));
+                if self.page == 6 {
+                    Some(Action::Brightness(value.clamp(5, 100) as u8))
+                } else {
+                    self.volume = value.clamp(0, 100) as u8;
+                    Some(Action::Volume(self.volume))
+                }
+            }
             (KEYBOARD, ActionKind::Clicked) => self.navigate(3),
             (SCAN, ActionKind::Clicked) => Some(Action::Scan),
             (DISCONNECT, ActionKind::Clicked) => Some(Action::Disconnect),
@@ -215,6 +290,15 @@ impl Ui {
             (id, ActionKind::Clicked) if id >= TYPING => {
                 let layout = password_keyboard::layout();
                 if let Some(k) = layout.get((id - TYPING) as usize) {
+                    let inserting = matches!(
+                        k.action,
+                        password_keyboard::Action::Character(_, _)
+                            | password_keyboard::Action::Space
+                    );
+                    if self.page == 5 && inserting && self.password.text.len() >= 24 {
+                        self.set_setting_message("Name limit: 24 ASCII bytes");
+                        return None;
+                    }
                     let enter = self.password.press(k.action);
                     self.busy = false;
                     self.invalidate(rect(12, 112, 336, 100));
@@ -228,7 +312,23 @@ impl Ui {
             _ => None,
         }
     }
-    fn connect(&self) -> Option<Action> {
+    fn parent_page(&self) -> u8 {
+        match self.page {
+            2 => 1,
+            1 | 5 | 6 | 7 => 4,
+            _ => 0,
+        }
+    }
+    fn connect(&mut self) -> Option<Action> {
+        if self.page == 5 {
+            if self.password.text.trim().is_empty() {
+                self.set_setting_message("Enter a non-empty name");
+                return None;
+            }
+            return String::<24>::try_from(self.password.text.as_str())
+                .ok()
+                .map(Action::BleName);
+        }
         if self.selected.is_empty() {
             None
         } else {
@@ -247,6 +347,37 @@ impl Ui {
         } else {
             self.busy = true;
             self.invalidate(rect(12, 178, 336, 48));
+        }
+    }
+    pub fn set_setting_message(&mut self, message: &str) {
+        if self.settings_message.as_str() != message {
+            copy_text(&mut self.settings_message, message);
+            self.invalidate(rect(12, 178, 336, 48));
+            self.invalidate(rect(12, 310, 336, 100));
+        }
+    }
+    pub fn brightness_result(&mut self, requested: u8, ok: bool) {
+        if ok {
+            self.brightness = requested.clamp(5, 100);
+        }
+        let value = self.brightness;
+        self.scene.update(SETTING_SLIDER, |w| {
+            if let Widget::Slider(slider) = w {
+                slider.value = i32::from(value);
+            }
+        });
+        self.invalidate(rect(24, 140, 312, 50));
+        self.set_setting_message(if ok {
+            "Brightness applied"
+        } else {
+            "Backlight write failed"
+        });
+    }
+    pub fn sync_ble_name(&mut self, name: &str, status: &str) {
+        copy_text(&mut self.ble_name, name);
+        if self.page == 5 && self.ble_status_seen.as_str() != status {
+            copy_text(&mut self.ble_status_seen, status);
+            self.set_setting_message(status);
         }
     }
     pub fn sync_status(
@@ -375,21 +506,20 @@ impl Ui {
                 }
             }
             1 => {
-                text(target, "SETTINGS", Point::new(105, 16), ink())?;
+                text(target, "WI-FI", Point::new(105, 16), ink())?;
                 text(
                     &mut target.clipped(&rect(12, 118, 336, 28)),
                     &self.message,
                     Point::new(12, 118),
                     accent(),
                 )?;
-                let scroll = match self.scene.get(NETWORKS) {
-                    Some(Widget::ListView(l)) => l.scroll,
-                    _ => 0,
+                let (scroll, interior) = match self.scene.get(NETWORKS) {
+                    Some(Widget::ListView(l)) => (l.scroll.min(l.max_scroll()), l.content_bounds()),
+                    _ => (0, rect(16, 154, 328, 366)),
                 };
                 // Scene has already drawn the list focus ring. Keep overlays
                 // inside its rounded, radius-8 perimeter, including when a
                 // scrolled separator crosses the top or bottom edge.
-                let interior = rect(16, 154, 328, 366);
                 let mut list = target.clipped(&interior);
                 for (i, n) in self.networks.iter().enumerate() {
                     let y = 150 + i as i32 * 70 - scroll as i32;
@@ -415,12 +545,34 @@ impl Ui {
                     accent(),
                 )?;
             }
-            2 => {
-                text(target, "WIFI PASSWORD", Point::new(100, 16), ink())?;
-                ssid(target, &self.selected, Point::new(12, 68), ink())?;
+            2 | 5 => {
+                text(
+                    target,
+                    if self.page == 5 {
+                        "BLUETOOTH NAME"
+                    } else {
+                        "WIFI PASSWORD"
+                    },
+                    Point::new(100, 16),
+                    ink(),
+                )?;
+                if self.page == 5 {
+                    text(
+                        target,
+                        "Non-connectable advertising",
+                        Point::new(12, 68),
+                        accent(),
+                    )?;
+                } else {
+                    ssid(target, &self.selected, Point::new(12, 68), ink())?;
+                }
                 let mut mask = String::<64>::new();
-                for _ in 0..self.password.text.len() {
-                    mask.push('*').ok();
+                if self.page == 5 {
+                    mask.push_str(&self.password.text).ok();
+                } else {
+                    for _ in 0..self.password.text.len() {
+                        mask.push('*').ok();
+                    }
                 }
                 text(
                     &mut target.clipped(&rect(22, 112, 316, 52)),
@@ -429,13 +581,16 @@ impl Ui {
                     ink(),
                 )?;
                 let mut hint = String::<96>::new();
-                if self.busy {
+                if self.page == 5 && !self.settings_message.is_empty() {
+                    hint.push_str(&self.settings_message).ok();
+                } else if self.busy {
                     hint.push_str("Wi-Fi busy. Please retry.").ok();
                 } else {
                     write!(
                         &mut hint,
-                        "{} / 64  Shift:{} Caps:{}",
+                        "{} / {}  Shift:{} Caps:{}",
                         self.password.text.len(),
+                        if self.page == 5 { 24 } else { 64 },
                         if self.password.shift { "ON" } else { "off" },
                         if self.password.caps { "ON" } else { "off" }
                     )
@@ -499,6 +654,57 @@ impl Ui {
                         "USB inactive"
                     },
                     Point::new(16, 600),
+                    accent(),
+                )?;
+            }
+            4 => {
+                text(target, "SETTINGS", Point::new(105, 16), ink())?;
+                text(
+                    target,
+                    "Changes last until reboot",
+                    Point::new(20, 570),
+                    accent(),
+                )?;
+            }
+            6 | 7 => {
+                text(
+                    target,
+                    if self.page == 6 {
+                        "BRIGHTNESS"
+                    } else {
+                        "VOLUME"
+                    },
+                    Point::new(105, 16),
+                    ink(),
+                )?;
+                let value = if self.page == 6 {
+                    self.brightness
+                } else {
+                    self.volume
+                };
+                let mut label = String::<32>::new();
+                write!(&mut label, "{}%", value).ok();
+                text(target, &label, Point::new(24, 152), ink())?;
+                text(
+                    target,
+                    if self.page == 6 {
+                        "Minimum 5% keeps touch usable"
+                    } else {
+                        "Playback only; 100% = 0 dB"
+                    },
+                    Point::new(12, 310),
+                    accent(),
+                )?;
+                text(
+                    &mut target.clipped(&rect(12, 350, 336, 40)),
+                    &self.settings_message,
+                    Point::new(12, 350),
+                    accent(),
+                )?;
+                text(
+                    target,
+                    "Changes last until reboot",
+                    Point::new(20, 570),
                     accent(),
                 )?;
             }
@@ -635,49 +841,12 @@ fn status_icon<D: DrawTarget<Color = Rgb565>>(
     } else {
         rgb(0xb8, 0xcd, 0xd5)
     };
-    let st = PrimitiveStyle::with_stroke(c, 3);
-    match kind {
-        0 => {
-            for (a, b) in [
-                (Point::new(1, 8), Point::new(14, 1)),
-                (Point::new(14, 1), Point::new(27, 8)),
-                (Point::new(6, 15), Point::new(14, 10)),
-                (Point::new(14, 10), Point::new(22, 15)),
-            ] {
-                Line::new(p + a, p + b).into_styled(st).draw(d)?;
-            }
-            Circle::new(p + Point::new(11, 21), 6)
-                .into_styled(PrimitiveStyle::with_fill(c))
-                .draw(d)?;
-        }
-        1 => {
-            for (a, b) in [
-                (Point::new(13, 0), Point::new(13, 29)),
-                (Point::new(13, 0), Point::new(24, 9)),
-                (Point::new(24, 9), Point::new(3, 23)),
-                (Point::new(3, 7), Point::new(24, 21)),
-                (Point::new(24, 21), Point::new(13, 29)),
-            ] {
-                Line::new(p + a, p + b).into_styled(st).draw(d)?;
-            }
-        }
-        _ => {
-            Line::new(p + Point::new(15, 1), p + Point::new(15, 27))
-                .into_styled(st)
-                .draw(d)?;
-            Line::new(p + Point::new(4, 10), p + Point::new(15, 19))
-                .into_styled(st)
-                .draw(d)?;
-            Line::new(p + Point::new(26, 7), p + Point::new(15, 15))
-                .into_styled(st)
-                .draw(d)?;
-            Circle::new(p + Point::new(1, 6), 6)
-                .into_styled(PrimitiveStyle::with_fill(c))
-                .draw(d)?;
-            d.fill_solid(&rect(p.x + 23, p.y + 3, 6, 6), c)?;
-        }
-    }
-    Ok(())
+    let mask: &[u8] = match kind {
+        0 => include_bytes!("../assets/material-icons/wifi.a8"),
+        1 => include_bytes!("../assets/material-icons/bluetooth.a8"),
+        _ => include_bytes!("../assets/material-icons/usb.a8"),
+    };
+    AlphaIcon::new(mask, Size::new(30, 30)).draw(d, p, c, background())
 }
 
 fn typing_label<D: DrawTarget<Color = Rgb565>>(

@@ -232,3 +232,10 @@ pub fn init(
     crate::diagnostic!("display: dpi streaming");
     (dpi, i2c)
 }
+
+/// Set the Waveshare board backlight (I2C 0x45 register 0x96).
+/// This UI uses 5..=100 percent to keep the display recoverable by touch.
+pub fn set_brightness(i2c: &mut I2c<'_, Blocking>, percent: u8) -> bool {
+    let value = (u16::from(percent.clamp(5, 100)) * 255 / 100) as u8;
+    i2c.write(0x45, &[0x96, value]).is_ok()
+}

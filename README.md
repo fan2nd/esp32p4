@@ -7,7 +7,7 @@ Waveshare ESP32-P4-ETH / ESP32-P4-NANO-WIFI6-DB 的 Rust 固件、独立演示�
 
 | 目的 | 固件入口（`--bin`） | 说明 |
 | --- | --- | --- |
-| 纯 Rust 完整桌面：时钟、Wi-Fi、蓝牙状态、键盘与 USB 音频 | `desktop_tiny_ui` | [组件桌面](docs/guides/DESKTOP_TINY_UI.md) |
+| 纯 Rust 完整桌面：时钟、多级设置、键盘与 USB 音频 | `desktop_tiny_ui` | [组件桌面](docs/guides/DESKTOP_TINY_UI.md) |
 | 纯 Rust 无 alloc 组件框架：滑条、按钮、下拉、列表 | `rust_ui_demo` | [运行与验证限制](docs/guides/RUST_UI_DEMO.md) |
 | Slint UI 演示 | `slint_demo` + `--features slint-ui` | [Slint demo](docs/guides/SLINT_DEMO.md) |
 | 完整桌面：触摸、USB、音频、无线 | `desktop` + `--features slint-ui` | [桌面固件](docs/guides/DESKTOP.md) |

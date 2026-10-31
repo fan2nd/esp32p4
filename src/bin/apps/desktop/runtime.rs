@@ -458,6 +458,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
                 if active && primed {
                     amplifier.set_high();
                 }
+                let volume = desktop::PLAYBACK_VOLUME.load(core::sync::atomic::Ordering::Relaxed).min(100);
                 for frame in output[..available].as_chunks_mut::<4>().0 {
                     let sample = if active && primed {
                         sent += 1;
@@ -465,6 +466,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
                     } else {
                         0i16
                     };
+                    let sample = (i32::from(sample) * i32::from(volume) / 100) as i16;
                     frame[..2].copy_from_slice(&sample.to_le_bytes());
                     frame[2..].copy_from_slice(&sample.to_le_bytes());
                 }

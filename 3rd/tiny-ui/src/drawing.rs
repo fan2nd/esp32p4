@@ -1,5 +1,5 @@
 //! Software rasterization of widgets and popup layers.
-use crate::{Alignment, FontSize, Style, Widget};
+use crate::{Alignment, FontSize, ListView, Style, Widget};
 use embedded_graphics::{
     mono_font::{
         ascii::{FONT_10X20, FONT_9X18},
@@ -7,7 +7,9 @@ use embedded_graphics::{
     },
     pixelcolor::Rgb565,
     prelude::*,
-    primitives::{Line, PrimitiveStyle, Rectangle, RoundedRectangle},
+    primitives::{
+        Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, RoundedRectangle, StrokeAlignment,
+    },
     text::{Baseline, Text, TextStyleBuilder},
 };
 
@@ -18,7 +20,14 @@ fn card<D: DrawTarget<Color = Rgb565>>(
     color: Rgb565,
 ) -> Result<(), D::Error> {
     RoundedRectangle::with_equal_corners(b, Size::new(s.radius, s.radius))
-        .into_styled(PrimitiveStyle::with_fill(color))
+        .into_styled(
+            PrimitiveStyleBuilder::new()
+                .fill_color(color)
+                .stroke_color(s.border)
+                .stroke_width(s.border_width.min(b.size.width / 2).min(b.size.height / 2))
+                .stroke_alignment(StrokeAlignment::Inside)
+                .build(),
+        )
         .draw(t)
 }
 fn text<D: DrawTarget<Color = Rgb565>>(
@@ -111,7 +120,7 @@ pub(crate) fn draw_widget<D: DrawTarget<Color = Rgb565>>(
             let mut clipped = t.clipped(&b);
             let t = &mut clipped;
             let (lo, hi) = v.limits();
-            let width = b.size.width.saturating_sub(1);
+            let (inset, width) = v.track_geometry();
             let x = if hi == lo {
                 0
             } else {
@@ -121,21 +130,31 @@ pub(crate) fn draw_widget<D: DrawTarget<Color = Rgb565>>(
             let y = b.top_left.y.saturating_add((b.size.height / 2) as i32);
             t.fill_solid(
                 &Rectangle::new(
-                    Point::new(b.top_left.x, y.saturating_sub(2)),
-                    Size::new(b.size.width, 4),
+                    Point::new(
+                        b.top_left.x.saturating_add(inset as i32),
+                        y.saturating_sub(2),
+                    ),
+                    Size::new(width.saturating_add(1), 4),
                 ),
                 s.border,
             )?;
             t.fill_solid(
                 &Rectangle::new(
-                    Point::new(b.top_left.x, y.saturating_sub(2)),
-                    Size::new(x as u32, 4),
+                    Point::new(
+                        b.top_left.x.saturating_add(inset as i32),
+                        y.saturating_sub(2),
+                    ),
+                    Size::new((x as u32).saturating_add(1), 4),
                 ),
                 s.accent,
             )?;
             let knob = Rectangle::new(
                 Point::new(
-                    b.top_left.x.saturating_add(x as i32).saturating_sub(6),
+                    b.top_left
+                        .x
+                        .saturating_add(inset as i32)
+                        .saturating_add(x as i32)
+                        .saturating_sub(6),
                     y.saturating_sub(9),
                 ),
                 Size::new(12, 18),
@@ -170,14 +189,77 @@ pub(crate) fn draw_widget<D: DrawTarget<Color = Rgb565>>(
                 .into_styled(PrimitiveStyle::with_stroke(s.foreground, 1))
                 .draw(&mut t)
         }
-        Widget::ListView(v) => draw_items(
-            t,
-            b,
-            v.items,
-            v.selected,
-            v.row_height,
-            v.scroll.min(v.max_scroll()),
-            s,
-        ),
+        Widget::ListView(v) => {
+            card(t, b, s, s.background)?;
+            // Retain the input/row coordinate system while keeping all row ink
+            // clear of the curved perimeter and the scrollbar gutter.
+            let content = v.content_bounds();
+            let mut rows = t.clipped(&content);
+            let row_bounds = Rectangle::new(
+                b.top_left,
+                Size::new(
+                    content
+                        .size
+                        .width
+                        .saturating_add((content.top_left.x as i64 - b.top_left.x as i64) as u32),
+                    b.size.height,
+                ),
+            );
+            draw_items(
+                &mut rows,
+                row_bounds,
+                v.items,
+                v.selected,
+                v.row_height,
+                v.scroll.min(v.max_scroll()),
+                s,
+            )?;
+            draw_scrollbar(t, v)
+        }
     }
+}
+
+fn draw_scrollbar<D: DrawTarget<Color = Rgb565>>(
+    target: &mut D,
+    list: &ListView,
+) -> Result<(), D::Error> {
+    let max_scroll = list.max_scroll();
+    let inner = list.inner_bounds();
+    if max_scroll == 0 || inner.size.width < 12 || inner.size.height == 0 {
+        return Ok(());
+    }
+    let track = Rectangle::new(
+        Point::new(
+            inner
+                .top_left
+                .x
+                .saturating_add((inner.size.width - 6).min(i32::MAX as u32) as i32),
+            inner.top_left.y,
+        ),
+        Size::new(4, inner.size.height),
+    );
+    let viewport = list.base.bounds.size.height as u64;
+    let total = viewport + max_scroll as u64;
+    let thumb_height = ((track.size.height as u64 * viewport / total) as u32)
+        .max(18)
+        .min(track.size.height);
+    let travel = track.size.height - thumb_height;
+    let offset = (travel as u64 * list.scroll.min(max_scroll) as u64 / max_scroll as u64) as u32;
+    let thumb = Rectangle::new(
+        Point::new(
+            track.top_left.x,
+            track
+                .top_left
+                .y
+                .saturating_add(offset.min(i32::MAX as u32) as i32),
+        ),
+        Size::new(track.size.width, thumb_height),
+    );
+    let mut target = target.clipped(&inner);
+    RoundedRectangle::with_equal_corners(track, Size::new(4, 4))
+        .into_styled(PrimitiveStyle::with_fill(list.base.style.border))
+        .draw(&mut target)?;
+    RoundedRectangle::with_equal_corners(thumb, Size::new(4, 4))
+        .into_styled(PrimitiveStyle::with_fill(list.base.style.accent))
+        .draw(&mut target)
 }

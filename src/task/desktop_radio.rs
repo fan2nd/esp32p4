@@ -16,19 +16,24 @@ use static_cell::StaticCell;
 static HOSTED: StaticCell<embassy_net_esp_hosted::State> = StaticCell::new();
 static NET: StaticCell<StackResources<5>> = StaticCell::new();
 
-struct HciCommand(u16);
-impl PacketToController for HciCommand {
+struct HciCommand<'a> {
+    opcode: u16,
+    parameters: &'a [u8],
+}
+impl PacketToController for HciCommand<'_> {
     const KIND: PacketKind = PacketKind::Cmd;
     fn size(&self) -> usize {
-        3
+        3 + self.parameters.len()
     }
     fn write_hci<W: embedded_io::Write>(&self, mut w: W) -> Result<(), W::Error> {
-        let [lo, hi] = self.0.to_le_bytes();
-        w.write_all(&[lo, hi, 0])
+        let [lo, hi] = self.opcode.to_le_bytes();
+        w.write_all(&[lo, hi, self.parameters.len() as u8])?;
+        w.write_all(self.parameters)
     }
     async fn write_hci_async<W: embedded_io_async::Write>(&self, mut w: W) -> Result<(), W::Error> {
-        let [lo, hi] = self.0.to_le_bytes();
-        w.write_all(&[lo, hi, 0]).await
+        let [lo, hi] = self.opcode.to_le_bytes();
+        w.write_all(&[lo, hi, self.parameters.len() as u8]).await?;
+        w.write_all(self.parameters).await
     }
 }
 struct HciEvent {
@@ -74,44 +79,166 @@ impl<'d> PacketToHost<'d> for HciEvent {
         Ok(e)
     }
 }
+#[derive(Clone, Copy)]
+enum HciFailure {
+    Rejected,
+    Unknown,
+}
+
+/// Only this task owns command/response sequencing. A transport failure or
+/// timeout is terminal until reboot: a late same-opcode completion must never
+/// be mistaken for a later request's acknowledgement.
+async fn hci_command(
+    driver: &embassy_net_esp_hosted::bluetooth::BtDriver<'_>,
+    buffer: &mut [u8],
+    opcode: u16,
+    parameters: &[u8],
+) -> Result<(), HciFailure> {
+    match with_timeout(Duration::from_secs(3), async {
+        driver
+            .write(&HciCommand { opcode, parameters })
+            .await
+            .map_err(|_| HciFailure::Unknown)?;
+        loop {
+            let event: HciEvent = driver.read(buffer).await.map_err(|_| HciFailure::Unknown)?;
+            if event.code == 0x0e
+                && event.len >= 4
+                && u16::from_le_bytes([event.data[1], event.data[2]]) == opcode
+            {
+                return if event.data[3] == 0 {
+                    Ok(())
+                } else {
+                    Err(HciFailure::Rejected)
+                };
+            }
+            // An unsupported command can fail via Command Status instead of
+            // Command Complete. Successful status is not completion.
+            if event.code == 0x0f
+                && event.len >= 4
+                && u16::from_le_bytes([event.data[2], event.data[3]]) == opcode
+                && event.data[0] != 0
+            {
+                return Err(HciFailure::Rejected);
+            }
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Err(HciFailure::Unknown),
+    }
+}
+
+async fn apply_ble_name(
+    driver: &embassy_net_esp_hosted::bluetooth::BtDriver<'_>,
+    buffer: &mut [u8],
+    name: &str,
+) -> Result<(), HciFailure> {
+    // Bluetooth Core Vol 4 Part E 7.8.5, 7.8.7, 7.8.9. Disable before changing
+    // parameters; 0x03 is ADV_NONCONN_IND, public address, all three channels.
+    hci_command(driver, buffer, 0x200a, &[0]).await?;
+    desktop::with(|s| {
+        s.view.ble_advertising = false;
+        s.view.revision = s.view.revision.wrapping_add(1);
+    });
+    hci_command(
+        driver,
+        buffer,
+        0x2006,
+        &[
+            0x20, 0x03, 0x40, 0x03, // 500-520 ms intervals (0.625 ms units)
+            0x03, 0x00, 0x00, // non-connectable, own/peer public address types
+            0, 0, 0, 0, 0, 0, // ignored peer address for undirected advertising
+            0x07, 0x00, // all advertising channels, no filter
+        ],
+    )
+    .await?;
+    // Flags: LE General Discoverable + BR/EDR Not Supported. Complete Local
+    // Name is bounded to 24 UTF-8 bytes by the command's heapless String.
+    let mut data = [0u8; 32];
+    data[0] = (5 + name.len()) as u8;
+    data[1..4].copy_from_slice(&[2, 0x01, 0x06]);
+    data[4] = (1 + name.len()) as u8;
+    data[5] = 0x09;
+    data[6..6 + name.len()].copy_from_slice(name.as_bytes());
+    hci_command(driver, buffer, 0x2008, &data).await?;
+    hci_command(driver, buffer, 0x200a, &[1]).await
+}
+
 async fn bluetooth(driver: embassy_net_esp_hosted::bluetooth::BtDriver<'_>) {
     let mut buffer = [0; 1025];
-    let initialized = with_timeout(Duration::from_secs(8), async {
-        // Reset then read the public address. READY requires successful controller
-        // completions, not merely the presence of an HCI transport object.
-        for opcode in [0x0c03, 0x1009] {
-            driver.write(&HciCommand(opcode)).await.map_err(|_| ())?;
-            loop {
-                let event: HciEvent = driver.read(&mut buffer).await.map_err(|_| ())?;
-                if event.code == 0x0e
-                    && event.len >= 4
-                    && u16::from_le_bytes([event.data[1], event.data[2]]) == opcode
-                {
-                    if event.data[3] != 0 {
-                        return Err(());
+    let initialized = async {
+        hci_command(&driver, &mut buffer, 0x0c03, &[]).await?;
+        hci_command(&driver, &mut buffer, 0x1009, &[]).await
+    }
+    .await;
+    let mut healthy = initialized.is_ok();
+    desktop::with(|s| {
+        s.view.bluetooth = if healthy { "READY" } else { "ERROR" };
+        s.view.ble_name_status = if healthy {
+            "Not advertising"
+        } else {
+            "Controller unavailable"
+        };
+        s.view.revision = s.view.revision.wrapping_add(1);
+    });
+    // No automatic advertising on boot. Explicit UI Apply advertises only a
+    // public name, without a connection, pairing, GATT or Bluetooth HID service.
+    loop {
+        if let Some(name) = desktop::with(|s| s.ble_name_command.take()) {
+            if !healthy {
+                desktop::with(|s| {
+                    s.view.ble_name_status = "Controller unavailable";
+                    s.view.revision = s.view.revision.wrapping_add(1);
+                });
+            } else if name.is_empty() || name.chars().any(char::is_control) {
+                desktop::with(|s| {
+                    s.view.ble_name_status = "Invalid name";
+                    s.view.revision = s.view.revision.wrapping_add(1);
+                });
+            } else {
+                match apply_ble_name(&driver, &mut buffer, &name).await {
+                    Ok(()) => desktop::with(|s| {
+                        s.view.ble_name = name;
+                        s.view.ble_advertising = true;
+                        s.view.ble_name_status = "Advertising name";
+                        s.view.revision = s.view.revision.wrapping_add(1);
+                    }),
+                    Err(HciFailure::Rejected) => desktop::with(|s| {
+                        s.view.ble_name_status = "Controller rejected change";
+                        s.view.revision = s.view.revision.wrapping_add(1);
+                    }),
+                    Err(HciFailure::Unknown) => {
+                        healthy = false;
+                        desktop::with(|s| {
+                            s.view.bluetooth = "ERROR";
+                            // Last confirmed flag remains; the explicit unknown
+                            // status takes precedence until a reboot resets HCI.
+                            s.view.ble_name_status = "State unknown; reboot";
+                            s.view.revision = s.view.revision.wrapping_add(1);
+                        });
                     }
-                    break;
                 }
             }
         }
-        Ok(())
-    })
-    .await;
-    let status = if matches!(initialized, Ok(Ok(()))) {
-        "READY"
-    } else {
-        "ERROR"
-    };
-    log::info!("desktop: Bluetooth {}", status);
-    desktop::with(|s| {
-        s.view.bluetooth = status;
-        s.view.revision += 1;
-    });
-    // Drain events so the shared C5 transport cannot back up. No advertising,
-    // pairing or HID profile is enabled in this first Bluetooth implementation.
-    loop {
-        let _: Result<HciEvent, _> = driver.read(&mut buffer).await;
-        Timer::after_millis(10).await;
+        // Receive is cancellation-safe: BtDriver waits for a whole packet and
+        // consumes it synchronously. Bounded idle polling also services Apply.
+        let received: Result<Result<HciEvent, _>, _> =
+            with_timeout(Duration::from_millis(50), driver.read(&mut buffer)).await;
+        let fault = match received {
+            Ok(Ok(event)) => event.code == 0x10, // HCI Hardware Error
+            Ok(Err(_)) => true,
+            Err(_) => false, // no event while idle is expected
+        };
+        if fault && healthy {
+            healthy = false;
+            desktop::with(|s| {
+                s.view.bluetooth = "ERROR";
+                s.view.ble_name_status = "State unknown; reboot";
+                s.view.revision = s.view.revision.wrapping_add(1);
+            });
+        }
+        Timer::after_millis(5).await;
     }
 }
 
@@ -155,6 +282,7 @@ pub async fn run(bus: Slot<'static, 1, Async>, reset: Output<'static>) {
     desktop::with(|s| {
         s.view.wifi = "ERROR";
         s.view.bluetooth = "ERROR";
+        s.view.ble_name_status = "Controller unavailable";
         s.view.ip = None;
         s.view.message = "C5 transport stopped";
         s.view.revision += 1;
@@ -178,7 +306,11 @@ async fn wifi(control: &mut embassy_net_esp_hosted::Control<'_>, stack: Stack<'s
                     with_timeout(Duration::from_secs(30), control.scan(&mut networks)).await,
                     Ok(Ok(()))
                 );
-                log::info!("desktop: scan complete ok={} records={} capacity=64", ok, networks.len());
+                log::info!(
+                    "desktop: scan complete ok={} records={} capacity=64",
+                    ok,
+                    networks.len()
+                );
                 networks.sort_unstable_by(|a, b| b.rssi.cmp(&a.rssi));
                 desktop::with(|s| {
                     if ok {

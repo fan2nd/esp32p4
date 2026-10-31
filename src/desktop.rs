@@ -20,6 +20,9 @@ pub enum Command {
 }
 #[derive(Clone)]
 pub struct View {
+    pub ble_name: String<24>,
+    pub ble_name_status: &'static str,
+    pub ble_advertising: bool,
     pub wifi: &'static str,
     pub bluetooth: &'static str,
     pub usb: bool,
@@ -30,6 +33,7 @@ pub struct View {
     pub revision: u32,
 }
 pub struct Shared {
+    pub ble_name_command: Option<String<24>>,
     pub view: View,
     pub command: Option<Command>,
     pub keymap: Keymap,
@@ -39,7 +43,11 @@ pub struct Shared {
 impl Shared {
     pub fn new(keymap: Keymap) -> Self {
         Self {
+            ble_name_command: None,
             view: View {
+                ble_name: String::try_from("P4 Desktop").unwrap(),
+                ble_name_status: "Not advertising",
+                ble_advertising: false,
                 wifi: "STARTING",
                 bluetooth: "STARTING",
                 usb: false,
@@ -90,3 +98,6 @@ pub fn park_for_flash() {
 pub fn with<R>(f: impl FnOnce(&mut Shared) -> R) -> R {
     critical_section::with(|cs| f(SHARED.borrow(cs).borrow_mut().as_mut().unwrap()))
 }
+
+/// Session-only playback attenuation. 100% is unity, never positive gain.
+pub static PLAYBACK_VOLUME: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(100);

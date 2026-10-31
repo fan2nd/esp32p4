@@ -98,10 +98,17 @@ impl Slider {
         }
         (lo + ((v - lo + step / 2) / step) * step).clamp(lo, hi) as i32
     }
+    /// Thumb centers stay inside the bounds at both ends of the range.
+    pub(crate) fn track_geometry(&self) -> (u32, u32) {
+        let width = self.base.bounds.size.width;
+        let inset = 6.min(width.saturating_sub(1) / 2);
+        (inset, width.saturating_sub(1).saturating_sub(inset * 2))
+    }
     pub(crate) fn at(&mut self, p: Point) {
         let (lo, hi) = self.limits();
-        let width = self.base.bounds.size.width.saturating_sub(1).max(1) as i64;
-        let x = (p.x as i64 - self.base.bounds.top_left.x as i64).clamp(0, width);
+        let (inset, travel) = self.track_geometry();
+        let width = travel.max(1) as i64;
+        let x = (p.x as i64 - self.base.bounds.top_left.x as i64 - inset as i64).clamp(0, width);
         self.value = self.quantize(lo + ((hi - lo) as u64 * x as u64 / width as u64) as i64);
     }
 }
@@ -172,6 +179,47 @@ impl ListView {
             .max(1)
             .saturating_mul(self.items.len().min(u32::MAX as usize) as u32)
             .saturating_sub(self.base.bounds.size.height)
+    }
+    /// Bounds for custom row overlays, excluding rounded edges and the scrollbar.
+    /// Row positions still use `base.bounds.top_left` and the clamped scroll offset.
+    pub fn content_bounds(&self) -> Rectangle {
+        let inner = self.inner_bounds();
+        Rectangle::new(
+            inner.top_left,
+            Size::new(
+                inner.size.width.saturating_sub(
+                    if self.max_scroll() > 0 && inner.size.width >= 12 && inner.size.height > 0 {
+                        12
+                    } else {
+                        0
+                    },
+                ),
+                inner.size.height,
+            ),
+        )
+    }
+    pub(crate) fn inner_bounds(&self) -> Rectangle {
+        let b = self.base.bounds;
+        // Keep row fills/overlays inside the curved focus perimeter.
+        let inset = self
+            .base
+            .style
+            .radius
+            .div_ceil(2)
+            .max(self.base.style.border_width)
+            .max(1)
+            .min(b.size.width / 2)
+            .min(b.size.height / 2);
+        Rectangle::new(
+            Point::new(
+                b.top_left.x.saturating_add(inset as i32),
+                b.top_left.y.saturating_add(inset as i32),
+            ),
+            Size::new(
+                b.size.width.saturating_sub(2 * inset),
+                b.size.height.saturating_sub(2 * inset),
+            ),
+        )
     }
     pub(crate) fn reveal(&mut self) {
         let top = (self.selected as u32).saturating_mul(self.row_height.max(1));

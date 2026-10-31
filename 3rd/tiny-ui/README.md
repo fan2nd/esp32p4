@@ -11,7 +11,11 @@ A reusable `#![no_std]`, allocation-free retained UI over `embedded-graphics`
   slices; labels use 96-byte UTF-8 inline storage and support `core::fmt::Write`.
 - Pointer capture lasts until release/cancel. Buttons click on release; slider
   ranges/steps use widened arithmetic; list dragging cancels taps and clamps
-  scrolling. Popups capture input, dismiss outside, and render above all widgets.
+  scrolling. Overflowing lists show a proportional right-hand scrollbar with an
+  18-pixel minimum thumb; it disappears when all rows fit. Custom row overlays
+  should clip to `ListView::content_bounds()` to preserve its scrollbar gutter
+  and rounded focus perimeter. Row positions/input coordinates are unchanged.
+  Popups capture input, dismiss outside, and render above all widgets.
 - Keyboard previous/next moves focus; arrows adjust/select; activate operates
   buttons/combos and Escape/Cancel clears activation. Each scene owns its state.
   Logical focus is separate from its visible keyboard-navigation ring: pointer
@@ -84,3 +88,9 @@ arrays, ASCII bitmap fonts, and built-in widget variants. It is intentionally
 not a Slint parser, automatic layout system, general custom-widget trait, or
 animated/inertial scroller. List clipping is rectangular; popup size/placement
 is configured by the caller and clipped to the scene viewport.
+
+`AlphaIcon` draws a pre-rasterized 8-bit coverage mask against a known solid
+background without allocation. Applications own icon artwork and attribution.
+`Style::border_width` controls normal rounded control outlines; the default is
+one logical pixel and the stroke stays inside the widget bounds. This persistent
+control boundary is separate from keyboard-only focus feedback.

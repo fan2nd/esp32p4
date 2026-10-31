@@ -87,11 +87,35 @@ impl DrawTarget for Panel<'_> {
     }
 }
 
-fn dispatch(ui: &mut Ui, event: Event) {
+fn dispatch(ui: &mut Ui, event: Event, i2c: &mut I2c<'_, Blocking>) {
     let Some(action) = ui.handle(event) else {
         return;
     };
     match action {
+        Action::Brightness(value) => {
+            let ok = display::set_brightness(i2c, value);
+            ui.brightness_result(value, ok);
+        }
+        Action::Volume(value) => {
+            desktop::PLAYBACK_VOLUME.store(value.min(100), core::sync::atomic::Ordering::Relaxed);
+            ui.set_setting_message("Playback volume applied");
+        }
+        Action::BleName(name) => {
+            let status = desktop::with(|state| {
+                if state.view.bluetooth != "READY" {
+                    return "Bluetooth is not ready";
+                }
+                if state.ble_name_command.is_some() || state.view.ble_name_status == "Applying..." {
+                    return "Bluetooth busy. Please retry.";
+                }
+                state.ble_name_command = Some(name);
+                state.view.ble_name_status = "Applying...";
+                state.view.revision = state.view.revision.wrapping_add(1);
+                "Applying..."
+            });
+            ui.set_setting_message(status);
+        }
+
         Action::Scan => desktop::with(|state| {
             if state.command.is_none() {
                 state.command = Some(Command::Scan);
@@ -188,16 +212,16 @@ pub fn run(
             }
             if points.is_empty() {
                 if contact_id.take().is_some() {
-                    dispatch(&mut ui, Event::Up(position));
+                    dispatch(&mut ui, Event::Up(position), &mut i2c);
                 }
                 suppressed = false;
             } else if !suppressed {
                 if let Some(id) = contact_id {
                     if let Some(point) = points.iter().find(|point| point.id == id) {
                         position = Point::new(point.position.x / 2, point.position.y / 2);
-                        dispatch(&mut ui, Event::Move(position));
+                        dispatch(&mut ui, Event::Move(position), &mut i2c);
                     } else {
-                        dispatch(&mut ui, Event::Cancel);
+                        dispatch(&mut ui, Event::Cancel, &mut i2c);
                         contact_id = None;
                         suppressed = true;
                     }
@@ -205,13 +229,13 @@ pub fn run(
                     let point = points[0];
                     contact_id = Some(point.id);
                     position = Point::new(point.position.x / 2, point.position.y / 2);
-                    dispatch(&mut ui, Event::Down(position));
+                    dispatch(&mut ui, Event::Down(position), &mut i2c);
                 }
             }
         } else if now.saturating_sub(last_touch) > 500 {
             mask = 0;
             if contact_id.take().is_some() {
-                dispatch(&mut ui, Event::Cancel);
+                dispatch(&mut ui, Event::Cancel, &mut i2c);
                 suppressed = true;
             }
         }
@@ -246,6 +270,7 @@ pub fn run(
                     address[0], address[1], address[2], address[3]
                 );
             }
+            ui.sync_ble_name(&view.ble_name, view.ble_name_status);
             ui.sync_status(
                 &clock,
                 view.ip.is_some(),
