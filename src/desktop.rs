@@ -23,6 +23,7 @@ pub enum Command {
 }
 #[derive(Clone)]
 pub struct View {
+    pub weather: String<64>,
     pub save_status: &'static str,
     pub ble_name: String<24>,
     pub ble_name_status: &'static str,
@@ -56,6 +57,7 @@ impl Shared {
             ble_enable_command: None,
             wifi_busy: false,
             view: View {
+                weather: String::try_from("Weather: configure on web").unwrap(),
                 save_status: "Saved to flash",
                 ble_name: settings.ble_name.clone(),
                 ble_name_status: "Not advertising",

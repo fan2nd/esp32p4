@@ -1,12 +1,49 @@
 <!doctype html>
-<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>P4 主页图片</title><style>
-:root{font-family:system-ui,sans-serif;color:#183044;background:#edf6fb}body{max-width:760px;margin:36px auto;padding:0 20px}h1{font-size:28px}section{background:white;border:1px solid #d2e3ec;border-radius:20px;padding:24px;margin:20px 0}canvas{display:block;max-width:100%;height:auto;margin:20px auto;border-radius:12px;background:#e8f7ff}button,select,input{font:inherit}button{border:0;border-radius:10px;padding:12px 18px;background:#267b9a;color:white;margin:8px 8px 0 0;cursor:pointer}button.secondary{background:#e6eef3;color:#183044}button:disabled{opacity:.5;cursor:default}p{line-height:1.7}progress{width:100%;height:18px}#status{white-space:pre-wrap}small{color:#546d7b}</style>
-<h1>主页图片</h1><p>选择静态图片或 GIF，预览后上传到 P4。图片保存后，重启仍会显示。</p>
-<section><label>图片文件 <input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
-<p><label>显示精度 <select id="size"><option value="350">清晰 · 350 × 326</option><option value="175">节省空间 · 175 × 163</option></select></label></p>
-<canvas id="preview" width="350" height="326"></canvas><small>静图：PNG / JPG / WebP；动图：GIF。等比居中，透明背景与主页融合。最多 300 帧，转换后不超过 4 MiB，动图最高约 12 帧/秒。网页在本地转换，不上传到第三方。</small>
-<p><button id="upload" disabled>保存到主页</button><button class="secondary" id="restore">恢复默认图片</button></p>
-<progress id="progress" max="100" value="0"></progress><p id="status" role="status">正在连接设备…</p></section>
-<p><small>保存大图片需要一些时间；Flash 擦写期间音频可能短暂卡顿。此页面供可信局域网使用。</small></p>
-<script src="/app.js" defer></script></html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>P4 桌面设置</title>
+<link rel="stylesheet" href="/pico.css">
+<style>
+:root{--pico-font-size:100%;--pico-border-radius:.75rem}
+body{background:var(--pico-background-color)}main.container{max-width:980px}
+nav{margin-bottom:1.5rem}article{scroll-margin-top:1rem}article header h2{margin-bottom:.25rem}
+canvas{display:block;max-width:100%;height:auto;margin:auto;border-radius:var(--pico-border-radius);background:#e8f7ff}
+.preview{display:grid;place-items:center;padding:1rem;background:var(--pico-card-sectioning-background-color);border-radius:var(--pico-border-radius);margin-bottom:1rem}
+[role="status"]{margin:.75rem 0 0;overflow-wrap:anywhere;color:var(--pico-muted-color)}
+small{display:block;color:var(--pico-muted-color)}.actions{display:flex;gap:.75rem;flex-wrap:wrap}.actions button{margin:0}
+footer small{text-align:center}progress{margin-top:1rem}
+[role="group"]>button{white-space:nowrap;flex-shrink:0}[role="group"]>input{min-width:0}
+</style>
+<script src="/weather.js" defer></script><script src="/app.js" defer></script>
+</head>
+<body><main class="container">
+<nav aria-label="设置导航"><ul><li><strong>P4 DESKTOP</strong></li></ul><ul><li><a href="#image-settings">图片</a></li><li><a href="#weather-settings">天气</a></li></ul></nav>
+<hgroup><h1>桌面设置</h1><p>为你的桌面选择图片，设置城市天气。</p></hgroup>
+<article id="image-settings">
+<header><h2>主页图片</h2><small>支持静态图片与 GIF 动图，保存后重启仍然保留。</small></header>
+<div class="grid"><div>
+<label for="file">选择图片</label><input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+<label for="size">显示精度</label><select id="size"><option value="350">清晰 · 350 × 326</option><option value="175">节省空间 · 175 × 163</option></select>
+<small>PNG / JPG / WebP / GIF。等比居中，透明背景自动融合。最多 300 帧，转换后不超过 4 MiB。</small>
+</div><div class="preview"><canvas id="preview" width="350" height="326" aria-label="主页图片预览"></canvas></div></div>
+<div class="actions"><button id="upload" disabled>保存到主页</button><button class="secondary outline" id="restore">恢复默认图片</button></div>
+<progress id="progress" aria-label="图片上传进度" max="100" value="0"></progress>
+<p id="status" role="status" aria-live="polite">正在连接设备…</p>
+<footer><small>图片在浏览器本地转换。保存大图时需要稍等，期间音频可能短暂卡顿。</small></footer>
+</article>
+<article id="weather-settings">
+<header><h2>主页天气</h2><small>位置保存在设备中，每 15 分钟更新一次，无需保持网页打开。</small></header>
+<label for="weather-city">城市名称</label>
+<div role="group"><input id="weather-city" maxlength="48" placeholder="例如 Hangzhou"><button id="weather-search">搜索城市</button></div>
+<label for="weather-results">搜索结果</label><select id="weather-results"><option value="">请选择搜索结果</option></select>
+<details><summary>查看或手动填写经纬度</summary><div class="grid">
+<label>纬度 <input id="latitude" type="number" min="-90" max="90" step="any"></label>
+<label>经度 <input id="longitude" type="number" min="-180" max="180" step="any"></label>
+</div></details>
+<div class="actions"><button id="weather-save">保存天气位置</button><button id="weather-disable" class="secondary outline">关闭天气</button></div>
+<p id="weather-status" role="status" aria-live="polite">正在读取天气设置…</p>
+<footer><small>天气数据来自 <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>。搜索会发送城市名，天气查询会发送所选经纬度。模型估算，仅供日常参考。</small></footer>
+</article>
+<footer><small>P4 Desktop · 可信局域网设备管理</small></footer>
+</main></body></html>

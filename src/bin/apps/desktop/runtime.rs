@@ -155,7 +155,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
                 // old partition remains readable until the new value is safe.
                 let mut encoded = [0u8; 2048];
                 if let Ok(bytes) =
-                    postcard::to_slice(&(2u8, &settings, &keymap.bytes[..]), &mut encoded)
+                    postcard::to_slice(&(3u8, &settings, &keymap.bytes[..]), &mut encoded)
                 {
                     writable = kv
                         .store_item(&mut kv_buffer, &KV_KEY, &&bytes[..])
@@ -478,7 +478,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
                 }
             });
             let mut encoded = [0u8; 2048];
-            let Ok(record) = postcard::to_slice(&(2u8, &config, &map.bytes[..]), &mut encoded)
+            let Ok(record) = postcard::to_slice(&(3u8, &config, &map.bytes[..]), &mut encoded)
             else {
                 log::warn!("desktop: KV serialization failed");
                 changed = Instant::now();

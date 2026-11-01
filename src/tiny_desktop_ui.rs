@@ -381,6 +381,7 @@ pub fn run(
                     address[0], address[1], address[2], address[3]
                 );
             }
+            ui.sync_weather(&view.weather);
             ui.sync_ble_name(&view.ble_name, view.ble_name_status);
             ui.sync_status(
                 &clock,

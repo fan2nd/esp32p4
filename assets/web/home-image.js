@@ -2,7 +2,7 @@ import {parseGIF, decompressFrame} from "gifuct-js";
 const $=id=>document.getElementById(id), canvas=$("preview"), ctx=canvas.getContext("2d");
 const limit=0x400000-4096; let encoded=null, previewFrames=[], timer=0, busy=false;
 function status(s){$("status").textContent=s;}
-function lock(on){busy=on;$("file").disabled=on;$("size").disabled=on;$("restore").disabled=on;$("upload").disabled=on||!encoded;}
+function lock(on){busy=on;$("status").setAttribute("aria-busy",String(on));$("file").disabled=on;$("size").disabled=on;$("restore").disabled=on;$("upload").disabled=on||!encoded;}
 function u32(value){const b=new Uint8Array(4);new DataView(b.buffer).setUint32(0,value,true);return b;}
 // Full frames become run-length RGB565, so firmware performs no GIF/LZW work.
 function runs(rgba){const out=[];let last=-1,count=0;const flush=()=>{if(count)out.push(count&255,count>>8,last&255,last>>8);};for(let i=0;i<rgba.length;i+=4){const v=((rgba[i]>>3)<<11)|((rgba[i+1]>>2)<<5)|(rgba[i+2]>>3);if(v===last&&count<65535)count++;else{flush();last=v;count=1;}}flush();return new Uint8Array(out);}

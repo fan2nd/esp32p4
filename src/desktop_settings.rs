@@ -22,6 +22,7 @@ pub struct Settings {
     pub password: String<64>,
     pub wifi_enabled: bool,
     pub profiles: Vec<WifiProfile, 8>,
+    pub weather: Option<crate::task::weather::Location>,
     #[serde(skip)]
     pub revision: u32,
 }
@@ -36,6 +37,7 @@ impl Default for Settings {
             password: String::new(),
             wifi_enabled: true,
             profiles: Vec::new(),
+            weather: None,
             revision: 0,
         }
     }
@@ -71,13 +73,57 @@ impl Settings {
                     .ok()?;
             }
             (settings, keys)
+        } else if version == 2 {
+            // v2 has no weather field. Preserve all saved Wi-Fi/VIA configuration.
+            let (
+                _,
+                (
+                    brightness,
+                    volume,
+                    ble_advertising,
+                    ble_name,
+                    ssid,
+                    password,
+                    wifi_enabled,
+                    profiles,
+                ),
+                keys,
+            ): (
+                u8,
+                (
+                    u8,
+                    u8,
+                    bool,
+                    String<24>,
+                    String<32>,
+                    String<64>,
+                    bool,
+                    Vec<WifiProfile, 8>,
+                ),
+                &[u8],
+            ) = postcard::from_bytes(bytes).ok()?;
+            (
+                Self {
+                    brightness,
+                    volume,
+                    ble_advertising,
+                    ble_name,
+                    ssid,
+                    password,
+                    wifi_enabled,
+                    profiles,
+                    ..Self::default()
+                },
+                keys,
+            )
         } else {
             let (_, settings, keys): (u8, Self, &[u8]) = postcard::from_bytes(bytes).ok()?;
             (settings, keys)
         };
-        if !matches!(version, 1 | 2)
+        if !matches!(version, 1 | 2 | 3)
             || keys.len() != keyboard::PAYLOAD
             || !(5..=100).contains(&settings.brightness)
+            || settings.weather.as_ref().is_some_and(|p| !p.valid())
             || settings.volume > 100
             || settings.ble_name.is_empty()
             || settings.ble_name.chars().any(char::is_control)

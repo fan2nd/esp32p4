@@ -14,7 +14,7 @@ use embassy_time::{Duration, Instant, Timer, with_timeout};
 use esp_hal::{Async, gpio::Output, sdmmc::Slot};
 use static_cell::StaticCell;
 static HOSTED: StaticCell<embassy_net_esp_hosted::State> = StaticCell::new();
-static NET: StaticCell<StackResources<6>> = StaticCell::new();
+static NET: StaticCell<StackResources<12>> = StaticCell::new();
 
 struct HciCommand<'a> {
     opcode: u16,
@@ -318,7 +318,7 @@ pub async fn run(bus: Slot<'static, 1, Async>, reset: Output<'static>) {
                 wifi(&mut control, stack),
                 join(
                     bluetooth(resources.bluetooth),
-                    crate::task::home_web::run(stack),
+                    join(crate::task::home_web::run(stack), crate::task::weather::run(stack)),
                 ),
             ),
         )

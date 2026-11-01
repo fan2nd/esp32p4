@@ -24,3 +24,5 @@ python tools/usb_audio_capture.py --device "P4 Desktop"
 这些工具需要真实硬件，不是单元测试或离线回归脚本。连接 USB 前先阅读
 [供电安全说明](../docs/guides/USB_AUDIO.md)，VIA 用法见 [键盘指南](../docs/guides/KEYBOARD.md)。
 项目自有测试与主机测试包已移除；验证采用构建、静态检查与手动硬件验收，见 [项目约束](../AGENTS.md)。
+
+- `build_clock_font.py`：从 Inter 可变字体生成主页时钟 A8 字形，需 Pillow；字体授权见 `assets/CLOCK-FONT-LICENSE.txt`。

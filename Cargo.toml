@@ -1,7 +1,7 @@
 [package]
 edition = "2024"
 name = "waveshare_p4_eth"
-rust-version = "1.91"
+rust-version = "1.93"
 version = "0.1.0"
 autobins = false
 default-run = "main"
@@ -54,6 +54,8 @@ esp-storage = { version = "=0.10.0", features = ["esp32p4", "embedded-storage"] 
 sequential-storage = { version = "=8.0.2", default-features = false }
 embassy-embedded-hal = { version = "=0.6.0", default-features = false }
 embedded-storage-async = "0.4.1"
+picoserve = { version = "=0.20.1", default-features = false, features = ["embassy", "json"] }
+serde-json-core = { version = "0.6", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"] }
 postcard = { version = "1", default-features = false }
 embassy-net-esp-hosted = { path = "3rd/embassy-net-esp-hosted", features = ["esp-hosted-mcu", "log", "bluetooth"] }

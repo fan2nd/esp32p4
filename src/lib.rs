@@ -1,4 +1,6 @@
 #![no_std]
+// Picoserve router types nested in the concurrent Embassy server futures.
+#![recursion_limit = "256"]
 
 #[cfg(feature = "slint-ui")]
 extern crate alloc;
@@ -39,6 +41,7 @@ pub mod task {
     pub mod wifi_ble;
     pub mod desktop_radio;
     pub mod home_web;
+    pub mod weather;
     pub mod hosted;
     pub mod mdns;
     pub mod net;

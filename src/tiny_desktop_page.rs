@@ -4,7 +4,9 @@ use core::fmt::Write;
 use embedded_graphics::{
     mono_font::{
         MonoTextStyle,
-        ascii::{FONT_6X10, FONT_10X20},
+        ascii::FONT_6X10,
+        // Latin-1 includes the degree sign while preserving ASCII glyph metrics.
+        iso_8859_1::FONT_10X20,
     },
     pixelcolor::Rgb565,
     prelude::*,
@@ -33,7 +35,6 @@ const BLE_TOGGLE: u16 = 39;
 const SAVED_CONNECT: u16 = 40;
 const EDIT_PASSWORD: u16 = 41;
 const FORGET: u16 = 42;
-const TIME_SETTINGS: u16 = 43;
 const SYNC_TIME: u16 = 44;
 const TYPING: u16 = 100;
 const WIFI_SETTINGS: u16 = 30;
@@ -109,6 +110,7 @@ pub struct Ui {
     selected: String<32>,
     busy: bool,
     clock: String<16>,
+    weather: String<64>,
     ip: String<32>,
     message: String<96>,
     wifi_enabled: bool,
@@ -140,6 +142,7 @@ impl Ui {
             password: Password::default(),
             selected: String::new(),
             busy: false,
+            weather: String::new(),
             clock: String::try_from("--:--:--").unwrap(),
             ip: String::new(),
             message: String::new(),
@@ -193,6 +196,15 @@ impl Ui {
         }
         match self.page {
             0 => {
+                // Invisible button owns press/release hit testing for the clock.
+                let mut clock = Button::new(SYNC_TIME, rect(8, 8, 280, 62), "");
+                clock.base.style = Style {
+                    background: background(),
+                    pressed: background(),
+                    border_width: 0,
+                    ..style()
+                };
+                self.scene.add(clock).unwrap();
                 self.button(SETTINGS, rect(296, 8, 54, 36), "SET");
                 self.button(KEYBOARD, rect(12, 566, 160, 50), "KEYBOARD");
                 self.button(TOUCHPAD, rect(188, 566, 160, 50), "TOUCHPAD");
@@ -286,16 +298,12 @@ impl Ui {
                 for (id, y, title) in [
                     (WIFI_SETTINGS, 60, "Wi-Fi connection"),
                     (BLE_SETTINGS, 144, "Bluetooth name"),
-                    (TIME_SETTINGS, 228, "Time synchronization"),
-                    (BRIGHTNESS_SETTINGS, 312, "Screen brightness"),
-                    (VOLUME_SETTINGS, 396, "Playback volume"),
-                    (RESET_SETTINGS, 480, "Reset settings"),
+                    (BRIGHTNESS_SETTINGS, 228, "Screen brightness"),
+                    (VOLUME_SETTINGS, 312, "Playback volume"),
+                    (RESET_SETTINGS, 396, "Reset settings"),
                 ] {
                     self.button(id, rect(16, y, 328, 72), title);
                 }
-            }
-            10 => {
-                self.button(SYNC_TIME, rect(24, 210, 312, 64), "SYNC NOW");
             }
             8 => {
                 self.button(CONFIRM_RESET, rect(24, 330, 312, 64), "RESET AND RESTART");
@@ -352,7 +360,6 @@ impl Ui {
             (BLE_SETTINGS, ActionKind::Clicked) => self.navigate(5),
             (BRIGHTNESS_SETTINGS, ActionKind::Clicked) => self.navigate(6),
             (VOLUME_SETTINGS, ActionKind::Clicked) => self.navigate(7),
-            (TIME_SETTINGS, ActionKind::Clicked) => self.navigate(10),
             (SYNC_TIME, ActionKind::Clicked) => Some(Action::SyncTime),
             (RESET_SETTINGS, ActionKind::Clicked) => self.navigate(8),
             (CONFIRM_RESET, ActionKind::Clicked) => Some(Action::Reset),
@@ -420,7 +427,7 @@ impl Ui {
     fn parent_page(&self) -> u8 {
         match self.page {
             2 | 9 => 1,
-            1 | 5 | 6 | 7 | 8 | 10 => 4,
+            1 | 5 | 6 | 7 | 8 => 4,
             _ => 0,
         }
     }
@@ -528,6 +535,14 @@ impl Ui {
             self.set_setting_message(status);
         }
     }
+    pub fn sync_weather(&mut self, value: &str) {
+        if self.weather != value {
+            copy_text(&mut self.weather, value);
+            if self.page == 0 {
+                self.invalidate(rect(12, 150, 336, 20));
+            }
+        }
+    }
     pub fn sync_status(
         &mut self,
         clock: &str,
@@ -549,18 +564,10 @@ impl Ui {
         self.usb = usb;
         if self.page == 0 {
             if clock_changed {
-                self.invalidate(rect(12, 12, 280, 44));
+                self.invalidate(rect(12, 8, 224, 48));
             }
             if status_changed {
                 self.invalidate(rect(12, 72, 336, 78));
-            }
-        }
-        if self.page == 10 {
-            if clock_changed {
-                self.invalidate(rect(12, 110, 336, 44));
-            }
-            if message_changed {
-                self.invalidate(rect(12, 310, 336, 70));
             }
         }
         if self.page == 1 && message_changed {
@@ -662,11 +669,7 @@ impl Ui {
                 )?;
             }
             0 => {
-                let mut doubled = DoubleText {
-                    target,
-                    offset: Point::new(12, 12),
-                };
-                text(&mut doubled, &self.clock, Point::zero(), ink())?;
+                draw_clock(target, &self.clock)?;
                 status_icon(target, Point::new(16, 76), 0, self.wifi)?;
                 status_icon(target, Point::new(66, 76), 1, self.ble)?;
                 status_icon(target, Point::new(116, 76), 2, self.usb)?;
@@ -674,6 +677,12 @@ impl Ui {
                     &mut target.clipped(&rect(12, 122, 336, 28)),
                     &self.ip,
                     Point::new(12, 122),
+                    ink(),
+                )?;
+                text(
+                    &mut target.clipped(&rect(12, 150, 336, 20)),
+                    &self.weather,
+                    Point::new(12, 150),
                     ink(),
                 )?;
                 let image_clip = target.bounding_box().intersection(&rect(5, 170, 350, 326));
@@ -890,23 +899,6 @@ impl Ui {
                 )?;
                 text(target, &self.save_status, Point::new(20, 570), accent())?;
             }
-            10 => {
-                text(target, "TIME SYNC", Point::new(105, 16), ink())?;
-                text(target, &self.clock, Point::new(24, 118), ink())?;
-                text(
-                    target,
-                    "Beijing time (UTC+8)",
-                    Point::new(24, 158),
-                    accent(),
-                )?;
-                text(target, &self.message, Point::new(12, 310), accent())?;
-                text(
-                    target,
-                    "Manual only; requires Wi-Fi",
-                    Point::new(12, 390),
-                    ink(),
-                )?;
-            }
             9 => {
                 text(target, "SAVED NETWORK", Point::new(105, 16), ink())?;
                 ssid(target, &self.selected, Point::new(20, 90), ink())?;
@@ -1032,33 +1024,24 @@ fn ssid<D: DrawTarget<Color = Rgb565>>(
     }
     Ok(())
 }
-struct DoubleText<'a, D> {
-    target: &'a mut D,
-    offset: Point,
-}
-impl<D: DrawTarget<Color = Rgb565>> OriginDimensions for DoubleText<'_, D> {
-    fn size(&self) -> Size {
-        Size::new(140, 22)
+/// Fixed-width anti-aliased Inter digits keep seconds from shifting the clock.
+fn draw_clock<D: DrawTarget<Color = Rgb565>>(target: &mut D, value: &str) -> Result<(), D::Error> {
+    const FONT: &[u8] = include_bytes!("../assets/clock-inter.a8");
+    const CELL: usize = 28 * 48;
+    for (column, c) in value.bytes().take(8).enumerate() {
+        let index = match c {
+            b'0'..=b'9' => (c - b'0') as usize,
+            b':' => 10,
+            _ => 11,
+        };
+        AlphaIcon::new(&FONT[index * CELL..(index + 1) * CELL], Size::new(28, 48)).draw(
+            target,
+            Point::new(12 + column as i32 * 28, 8),
+            ink(),
+            background(),
+        )?;
     }
-}
-impl<D: DrawTarget<Color = Rgb565>> DrawTarget for DoubleText<'_, D> {
-    type Color = Rgb565;
-    type Error = D::Error;
-    fn draw_iter<I: IntoIterator<Item = Pixel<Rgb565>>>(
-        &mut self,
-        iter: I,
-    ) -> Result<(), Self::Error> {
-        for Pixel(p, c) in iter {
-            if !self.bounding_box().contains(p) {
-                continue;
-            }
-            self.target.fill_solid(
-                &rect(self.offset.x + p.x * 2, self.offset.y + p.y * 2, 2, 2),
-                c,
-            )?;
-        }
-        Ok(())
-    }
+    Ok(())
 }
 fn status_icon<D: DrawTarget<Color = Rgb565>>(
     d: &mut D,
