@@ -279,6 +279,7 @@ pub fn run(
     let mut last_probe = 0u64;
     let mut mask = 0u8;
     let mut macros = MacroController::default();
+    let mut touchpad = crate::touchpad::Touchpad::default();
     let mut previous_dirty: Option<Rectangle> = None;
     let mut revision = u32::MAX;
     let mut shown_second = u64::MAX;
@@ -291,8 +292,17 @@ pub fn run(
             touch = Gt911::probe(&mut i2c);
             last_probe = now;
         }
+        let pointer_enabled = ui.page() == crate::touchpad::PAGE && desktop::with(|s| s.view.usb);
+        if !pointer_enabled {
+            touchpad.cancel(|report| desktop::with(|s| s.pointer_report(report)));
+        }
         if let Some(points) = touch.as_mut().and_then(|driver| driver.poll(&mut i2c)) {
             last_touch = now;
+            if pointer_enabled {
+                touchpad.update(&points, now, |report| {
+                    desktop::with(|s| s.pointer_report(report))
+                });
+            }
             mask = 0;
             for point in &points {
                 if let Some(key) =
@@ -324,6 +334,7 @@ pub fn run(
                 }
             }
         } else if now.saturating_sub(last_touch) > 500 {
+            touchpad.cancel(|report| desktop::with(|s| s.pointer_report(report)));
             mask = 0;
             if contact_id.take().is_some() {
                 dispatch(&mut ui, Event::Cancel, &mut i2c);

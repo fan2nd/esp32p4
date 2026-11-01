@@ -285,6 +285,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     let mut keyboard_state = State::new();
     let mut consumer_state = State::new();
     let mut raw_state = State::new();
+    let mut pointer_state = State::new();
     let mut usb_status = UsbStatus { configured: false };
     let msc_bus = RefCell::new(None);
     let driver =
@@ -339,6 +340,16 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         &msc_link,
         card,
     );
+    let mut pointer = HidWriter::<_, 6>::new(
+        &mut builder,
+        &mut pointer_state,
+        HidConfig {
+            report_descriptor: waveshare_p4_eth::touchpad::DESCRIPTOR,
+            request_handler: None,
+            poll_ms: 1,
+            max_packet_size: 6,
+        },
+    );
     builder.handler(&mut usb_status);
     let mut usb = builder.build();
     // All futures run cooperatively on this one thread. RefCell borrows never
@@ -370,6 +381,23 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
                 }
                 if !desktop::with(|s| s.view.usb) {
                     break;
+                }
+                yield_now().await;
+            }
+        }
+    };
+    let pointer_hid = async {
+        loop {
+            pointer.ready().await;
+            let _ = pointer.write(&[0; 6]).await;
+            loop {
+                if !desktop::with(|s| s.view.usb) {
+                    break;
+                }
+                if let Some(report) = desktop::with(|s| s.pointer_reports.pop_front()) {
+                    if pointer.write(&report).await.is_err() {
+                        break;
+                    }
                 }
                 yield_now().await;
             }
@@ -713,7 +741,10 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
                 playback,
                 join(
                     capture,
-                    join(clock_feedback, join(hid, join(via, join(save, msc.run())))),
+                    join(
+                        clock_feedback,
+                        join(hid, join(pointer_hid, join(via, join(save, msc.run())))),
+                    ),
                 ),
             ),
         ),
@@ -738,6 +769,7 @@ impl embassy_usb::Handler for UsbStatus {
             s.view.usb = on;
             s.view.revision += 1;
             s.reports.clear();
+            s.pointer_reports.clear();
         });
     }
     fn suspended(&mut self, suspended: bool) {
@@ -751,6 +783,7 @@ impl embassy_usb::Handler for UsbStatus {
             }
             if !active {
                 s.reports.clear();
+                s.pointer_reports.clear();
             }
         });
         log::info!("desktop: USB suspended={} active={}", suspended, active);

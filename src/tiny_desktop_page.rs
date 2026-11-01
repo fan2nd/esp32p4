@@ -23,6 +23,7 @@ const EMPTY_ROWS: [&str; 64] = [""; 64];
 const BACK: u16 = 1;
 const SETTINGS: u16 = 2;
 const KEYBOARD: u16 = 3;
+const TOUCHPAD: u16 = 45;
 const SCAN: u16 = 4;
 const DISCONNECT: u16 = 5;
 const CONNECT: u16 = 6;
@@ -181,7 +182,8 @@ impl Ui {
         match self.page {
             0 => {
                 self.button(SETTINGS, rect(296, 8, 54, 36), "SET");
-                self.button(KEYBOARD, rect(70, 566, 220, 50), "KEYBOARD");
+                self.button(KEYBOARD, rect(12, 566, 160, 50), "KEYBOARD");
+                self.button(TOUCHPAD, rect(188, 566, 160, 50), "TOUCHPAD");
             }
             1 => {
                 self.button(
@@ -209,6 +211,17 @@ impl Ui {
                 };
                 self.scene.add(list).unwrap();
                 self.button(DISCONNECT, rect(12, 542, 336, 44), "DISCONNECT");
+            }
+            crate::touchpad::PAGE => {
+                for (id, area) in [
+                    (46, crate::touchpad::PAD),
+                    (47, crate::touchpad::LEFT),
+                    (48, crate::touchpad::RIGHT),
+                ] {
+                    let mut panel = Panel::new(id, area);
+                    panel.base.style = style();
+                    self.scene.add(panel).unwrap();
+                }
             }
             9 => {
                 self.button(SAVED_CONNECT, rect(24, 180, 312, 60), "CONNECT SAVED");
@@ -297,7 +310,7 @@ impl Ui {
         }
     }
     pub fn navigate(&mut self, page: u8) -> Option<Action> {
-        if page > 10 {
+        if page > crate::touchpad::PAGE {
             return None;
         }
         self.password.clear();
@@ -342,6 +355,7 @@ impl Ui {
                 }
             }
             (KEYBOARD, ActionKind::Clicked) => self.navigate(3),
+            (TOUCHPAD, ActionKind::Clicked) => self.navigate(crate::touchpad::PAGE),
             (WIFI_TOGGLE, ActionKind::Clicked) => Some(Action::WifiEnabled(!self.wifi_enabled)),
             (BLE_TOGGLE, ActionKind::Clicked) => Some(Action::BleEnabled(!self.ble_enabled)),
             (SAVED_CONNECT, ActionKind::Clicked) => {
@@ -540,7 +554,7 @@ impl Ui {
         if self.page == 1 && message_changed {
             self.invalidate(rect(12, 118, 336, 28));
         }
-        if self.page == 3 && status_changed {
+        if (self.page == 3 || self.page == crate::touchpad::PAGE) && status_changed {
             self.invalidate(rect(16, 600, 328, 25));
         }
     }
@@ -612,6 +626,29 @@ impl Ui {
     }
     fn overlays<D: DrawTarget<Color = Rgb565>>(&self, target: &mut D) -> Result<(), D::Error> {
         match self.page {
+            crate::touchpad::PAGE => {
+                text(target, "TOUCHPAD", Point::new(110, 16), ink())?;
+                for (p, message) in [
+                    (Point::new(32, 170), "One finger: move / tap"),
+                    (Point::new(32, 210), "Two fingers: scroll"),
+                    (Point::new(32, 250), "Two-finger tap: right click"),
+                    (Point::new(32, 330), "Hold LEFT + slide to drag"),
+                    (Point::new(62, 540), "LEFT"),
+                    (Point::new(232, 540), "RIGHT"),
+                ] {
+                    text(target, message, p, ink())?;
+                }
+                text(
+                    target,
+                    if self.usb {
+                        "USB connected"
+                    } else {
+                        "Connect USB data cable"
+                    },
+                    Point::new(16, 600),
+                    accent(),
+                )?;
+            }
             0 => {
                 let mut doubled = DoubleText {
                     target,

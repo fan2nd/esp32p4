@@ -16,10 +16,10 @@ VIA Raw HID 接口配套。启用 VIA 的 Design 页后手动选择盘中的 JSO
 
 | 资源 | 分配 |
 | --- | --- |
-| 接口 | UAC1 3 个、HID 3 个、MSC 1 个，共 7/8 |
-| IN 端点 | EP0、反馈、麦克风、键盘、Consumer、Raw HID、MSC，共 7 个 |
+| 接口 | UAC1 3 个、HID 4 个、MSC 1 个，共 8/8 |
+| IN 端点 | EP0、反馈、麦克风、键盘、Consumer、Raw HID、MSC、触控板，共 8 个 |
 | OUT 端点 | EP0、扬声器、Raw HID、MSC，共 4 个 |
-| FIFO | RX 47 + 16 + 9 + 8 + 16，TX 7 × 16，共 208/896 words |
+| FIFO | RX 47 + 16 + 9 + 8 + 16，TX 8 × 16，共 224/896 words |
 | OUT 暂存 | EP0 64 + 音频 34 × 8 + Raw HID 32 + MSC 64 = 432/512 bytes |
 
 MSC 在 Core 0 与既有 USB/audio futures 协作运行，每个 bulk 包后让出执行权。

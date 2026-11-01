@@ -10,6 +10,7 @@ pub mod desktop;
 pub mod desktop_settings;
 pub mod desktop_protocol;
 pub mod desktop_controls;
+pub mod touchpad;
 pub mod tiny_desktop_page;
 pub mod tiny_desktop_ui;
 #[cfg(feature = "slint-ui")]

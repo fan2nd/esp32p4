@@ -47,6 +47,7 @@ pub struct Shared {
     pub keymap: Keymap,
     pub reports: Deque<[u8; 10], 32>,
     pub pressed: u8,
+    pub pointer_reports: Deque<[u8; 6], 32>,
 }
 impl Shared {
     pub fn new(keymap: Keymap, settings: crate::desktop_settings::Settings) -> Self {
@@ -71,10 +72,22 @@ impl Shared {
             command: None,
             keymap,
             reports: Deque::new(),
+            pointer_reports: Deque::new(),
             pressed: 0,
             settings,
             reset_requested: false,
         }
+    }
+    /// A full queue drops stale motion, but keeps a release before the latest state.
+    pub fn pointer_report(&mut self, report: [u8; 6]) {
+        if !self.view.usb {
+            return;
+        }
+        if self.pointer_reports.is_full() {
+            self.pointer_reports.clear();
+            self.pointer_reports.push_back([0; 6]).unwrap();
+        }
+        self.pointer_reports.push_back(report).unwrap();
     }
     pub fn report(&mut self, report: [u8; 10]) {
         if self.reports.is_full() {
