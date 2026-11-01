@@ -11,6 +11,7 @@ pub mod desktop_settings;
 pub mod desktop_protocol;
 pub mod desktop_controls;
 pub mod touchpad;
+pub mod home_image;
 pub mod tiny_desktop_page;
 pub mod tiny_desktop_ui;
 #[cfg(feature = "slint-ui")]
@@ -30,12 +31,14 @@ pub mod driver {
     pub mod usb_audio;
     pub mod usb_msc;
     pub mod sd_card;
+    pub mod home_image_store;
 }
 
 /// Executor-facing long-lived application tasks.
 pub mod task {
     pub mod wifi_ble;
     pub mod desktop_radio;
+    pub mod home_web;
     pub mod hosted;
     pub mod mdns;
     pub mod net;

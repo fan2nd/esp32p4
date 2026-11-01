@@ -101,6 +101,7 @@ pub enum Action {
     },
 }
 pub struct Ui {
+    pub home: Option<crate::home_image::Player>,
     scene: Scene<72>,
     page: u8,
     networks: Vec<Network, 64>,
@@ -132,6 +133,7 @@ impl Default for Ui {
 impl Ui {
     pub fn new() -> Self {
         let mut v = Self {
+            home: None,
             scene: Scene::new(rect(0, 0, WIDTH, HEIGHT), background()),
             page: 0,
             networks: Vec::new(),
@@ -163,6 +165,16 @@ impl Ui {
     }
     pub fn dirty(&self) -> Option<Rectangle> {
         self.scene.damage()
+    }
+    pub fn tick_home(&mut self, now: u64) {
+        if self
+            .home
+            .as_mut()
+            .is_some_and(|p| p.tick(now, self.page == 0))
+            && self.page == 0
+        {
+            self.invalidate(rect(5, 170, 350, 326));
+        }
     }
     fn invalidate(&mut self, r: Rectangle) {
         self.scene.invalidate(Some(r));
@@ -665,11 +677,29 @@ impl Ui {
                     ink(),
                 )?;
                 let image_clip = target.bounding_box().intersection(&rect(5, 170, 350, 326));
-                for pixel in image_clip.points() {
-                    let x = (pixel.x - 5) as usize;
-                    let y = (pixel.y - 170) as usize;
-                    let i = (y * 2 * 700 + x * 2) * 3;
-                    target.draw_iter([Pixel(pixel, rgb(WHALE[i], WHALE[i + 1], WHALE[i + 2]))])?;
+                if let Some(image) = self.home.as_ref().filter(|p| p.width != 0) {
+                    // Reduced upload resolution keeps the same homepage area.
+                    for pixel in image_clip.points() {
+                        let x = (pixel.x - 5) as usize * image.width / 350;
+                        let y = (pixel.y - 170) as usize * image.height / 326;
+                        let color = image.pixels[y * image.width + x];
+                        target.draw_iter([Pixel(
+                            pixel,
+                            Rgb565::new(
+                                (color >> 11) as u8,
+                                ((color >> 5) & 63) as u8,
+                                (color & 31) as u8,
+                            ),
+                        )])?;
+                    }
+                } else {
+                    for pixel in image_clip.points() {
+                        let x = (pixel.x - 5) as usize;
+                        let y = (pixel.y - 170) as usize;
+                        let i = (y * 2 * 700 + x * 2) * 3;
+                        target
+                            .draw_iter([Pixel(pixel, rgb(WHALE[i], WHALE[i + 1], WHALE[i + 2]))])?;
+                    }
                 }
             }
             1 => {

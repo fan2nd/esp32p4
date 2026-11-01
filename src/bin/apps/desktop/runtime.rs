@@ -115,6 +115,16 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
             }
         }
     }
+    let image_partition = table_valid
+        && table.chunks_exact(32).any(|e| {
+            e[..4] == [0xaa, 0x50, 1, 0x06]
+                && e[4..8] == waveshare_p4_eth::driver::home_image_store::START.to_le_bytes()
+                && e[8..12]
+                    == (waveshare_p4_eth::driver::home_image_store::END
+                        - waveshare_p4_eth::driver::home_image_store::START)
+                        .to_le_bytes()
+                && &e[12..18] == b"images"
+        });
     let mut writable = table_valid
         && table.chunks_exact(32).any(|e| {
             e[..4] == [0xaa, 0x50, 1, 2]
@@ -421,12 +431,14 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         }
     };
     let save = async {
+        let mut images = waveshare_p4_eth::driver::home_image_store::Store::new();
         let mut observed = (0, 0, false);
         let mut saved = observed;
         let mut save_failed = false;
         let mut changed = Instant::now();
         loop {
             yield_now().await;
+            images.service(kv.flash(), image_partition).await;
             let revision =
                 desktop::with(|s| (s.keymap.revision, s.settings.revision, s.reset_requested));
             if revision != observed {

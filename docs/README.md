@@ -8,6 +8,7 @@
 - [完整桌面](guides/DESKTOP.md)
 - [宏键盘 / VIA](guides/KEYBOARD.md)
 - [USB 触控板](guides/TOUCHPAD.md)
+- [网页更新主页图片](guides/HOME_IMAGE_WEB.md)
 - [USB 音频](guides/USB_AUDIO.md)
 - [VIA 定义盘](guides/VIA_DRIVE.md)
 - [microSD 读卡器](guides/SD_READER.md)

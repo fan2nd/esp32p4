@@ -30,10 +30,14 @@ use crate::{
 /// this value is stable for the lifetime of `DsiDpi`.
 static VDMA_ISR_CHANNEL: atomic::AtomicU8 = atomic::AtomicU8::new(0);
 
+/// Number of descriptor-starvation recoveries since the last DPI initialization.
+/// Read from task context; the ISR never writes serial logs.
+pub static LLI_RECOVERIES: atomic::AtomicU32 = atomic::AtomicU32::new(0);
+const LLI_INVALID: u32 = 1 << 13;
 const MAX_FBS: usize = 3;
 /// LLIs in the circular DMA ring.  The ISR re-arms each one immediately after
-/// the DMA consumes it, so the ring never suspends regardless of ring depth.
-/// Two is sufficient; keeping it small reduces ISR overhead.
+/// the DMA consumes it. Long interrupt masking can exhaust both entries;
+/// the invalid-LLI interrupt re-arms them and explicitly resumes the channel.
 const NUM_LLIS: usize = 2;
 const DMA_BURST_LEN: u32 = 256;
 const FIFO_EMPTY_THRESHOLD: u32 = 1024 - DMA_BURST_LEN;
@@ -144,7 +148,8 @@ pub struct DpiConfig {
 fn vdma_block_done_isr() {
     let channel_id = VDMA_ISR_CHANNEL.load(atomic::Ordering::Relaxed) as usize;
     let ch = VDMA::regs().ch(channel_id);
-    ch.intclear0().write(|w| unsafe { w.bits(0xFFFFFFFF) });
+    let status = ch.intstatus0().read().bits();
+    ch.intclear0().write(|w| unsafe { w.bits(status) });
 
     LLI_STORAGE.with(|storage| {
         let mut storage = storage.get_mut();
@@ -154,6 +159,12 @@ fn vdma_block_done_isr() {
 
         storage.writeback();
     });
+    if status & LLI_INVALID != 0 {
+        // DW-GDMA does not refetch an invalid LLI just because memory changed.
+        // Publish VALID to SRAM first, then request the documented multi-block resume.
+        ch.blk_tfr_resumereq0().write(|w| w.ch1_blk_tfr_resumereq().set_bit());
+        LLI_RECOVERIES.fetch_add(1, atomic::Ordering::Relaxed);
+    }
 }
 
 // ── Async waker ───────────────────────────────────────────────────────────────
@@ -385,6 +396,7 @@ impl<'d> DsiDpi<'d> {
 
         let vdma_channel_id = bus.guard.vdma_channel_id;
         VDMA_ISR_CHANNEL.store(vdma_channel_id, atomic::Ordering::Relaxed);
+        LLI_RECOVERIES.store(0, atomic::Ordering::Relaxed);
 
         LLI_STORAGE.with(|storage| {
             let mut storage = storage.get_mut();
@@ -405,9 +417,9 @@ impl<'d> DsiDpi<'d> {
         {
             let ch = VDMA::regs().ch(vdma_channel_id as usize);
             ch.intstatus_enable0()
-                .write(|w| w.ch1_enable_block_tfr_done_intstat().set_bit());
+                .write(|w| unsafe { w.bits(1 | LLI_INVALID) });
             ch.intsignal_enable0()
-                .write(|w| w.ch1_enable_block_tfr_done_intsignal().set_bit());
+                .write(|w| unsafe { w.bits(1 | LLI_INVALID) });
         }
         interrupt::bind_handler(Interrupt::DMA, vdma_block_done_isr);
 

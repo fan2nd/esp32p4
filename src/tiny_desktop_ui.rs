@@ -245,10 +245,15 @@ pub fn run(
 ) -> ! {
     let memory = Psram::new(psram, PsramConfig::default());
     let (ptr, len) = memory.raw_parts();
-    assert!(len >= FRAME * 2);
+    assert!(len >= FRAME * 2 + crate::home_image::ARENA);
     // No UI heap: just the same two fixed-size PSRAM scanout buffers.
     let framebuffer = unsafe { core::slice::from_raw_parts_mut(ptr, FRAME * 2) };
     let mut ui = Ui::new();
+    let arena =
+        unsafe { core::slice::from_raw_parts_mut(ptr.add(FRAME * 2), crate::home_image::ARENA) };
+    ui.home = Some(crate::home_image::Player::new(crate::home_image::init(
+        arena,
+    )));
     let (front, back) = framebuffer.split_at_mut(FRAME);
     ui.render_full(&mut Panel(front)).unwrap();
     ui.render_full(&mut Panel(back)).unwrap();
@@ -423,6 +428,7 @@ pub fn run(
             revision = view.revision;
             shown_second = second;
         }
+        ui.tick_home(now);
         if let Some(dirty) = ui.dirty() {
             ui.render_with_extra_damage(&mut Panel(dpi.framebuffer_mut()), previous_dirty)
                 .unwrap();

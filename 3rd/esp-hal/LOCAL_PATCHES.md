@@ -59,3 +59,19 @@ the relocated integration tree passed all 14 firmware release links with
 includes the independent UI framework work at the tested snapshot; final UI
 changes require their own final integration check. No fresh board test was
 performed for this refresh.
+
+## DPI invalid-LLI recovery (2026-11-01)
+
+`src/mipi_dsi/dpi.rs` now enables descriptor-invalid status/signal (bit 13),
+re-arms and writes back the ring, then writes BLK_TFR_RESUMEREQ0=1 on that
+specific event. Long interrupt masking during Flash erase can consume both
+ring entries; changing VALID alone does not request another LLI fetch.
+The ISR records a counter without logging. This does not reset all DMA channels
+or enlarge the descriptor ring to hide missed servicing.
+
+Reference: Espressif `dw_gdma_ll_channel_resume_multi_block_transfer` and
+`DW_GDMA_LL_CHANNEL_EVENT_SHADOWREG_OR_LLI_INVALID_ERR` in
+https://github.com/espressif/esp-idf/blob/master/components/esp_hal_dma/esp32p4/include/hal/dw_gdma_ll.h .
+Firmware remains Rust. All release binaries built. A 160,572-byte upload produced six invalid-LLI
+recoveries; the user confirmed that the whale and status UI were displayed again.
+This verifies recovery in that workload, not absence of transient underflow or audio gaps.

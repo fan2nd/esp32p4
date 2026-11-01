@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>P4 主页图片</title><style>
+:root{font-family:system-ui,sans-serif;color:#183044;background:#edf6fb}body{max-width:760px;margin:36px auto;padding:0 20px}h1{font-size:28px}section{background:white;border:1px solid #d2e3ec;border-radius:20px;padding:24px;margin:20px 0}canvas{display:block;max-width:100%;height:auto;margin:20px auto;border-radius:12px;background:#e8f7ff}button,select,input{font:inherit}button{border:0;border-radius:10px;padding:12px 18px;background:#267b9a;color:white;margin:8px 8px 0 0;cursor:pointer}button.secondary{background:#e6eef3;color:#183044}button:disabled{opacity:.5;cursor:default}p{line-height:1.7}progress{width:100%;height:18px}#status{white-space:pre-wrap}small{color:#546d7b}</style>
+<h1>主页图片</h1><p>选择静态图片或 GIF，预览后上传到 P4。图片保存后，重启仍会显示。</p>
+<section><label>图片文件 <input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+<p><label>显示精度 <select id="size"><option value="350">清晰 · 350 × 326</option><option value="175">节省空间 · 175 × 163</option></select></label></p>
+<canvas id="preview" width="350" height="326"></canvas><small>静图：PNG / JPG / WebP；动图：GIF。等比居中，透明背景与主页融合。最多 300 帧，转换后不超过 4 MiB，动图最高约 12 帧/秒。网页在本地转换，不上传到第三方。</small>
+<p><button id="upload" disabled>保存到主页</button><button class="secondary" id="restore">恢复默认图片</button></p>
+<progress id="progress" max="100" value="0"></progress><p id="status" role="status">正在连接设备…</p></section>
+<p><small>保存大图片需要一些时间；Flash 擦写期间音频可能短暂卡顿。此页面供可信局域网使用。</small></p>
+<script src="/app.js" defer></script></html>
