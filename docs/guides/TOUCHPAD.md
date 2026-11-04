@@ -18,11 +18,11 @@
 
 ## 架构与资源
 
-- `src/touchpad.rs`：手势状态、区域定义和六字节 HID 报告描述符。
-- `src/tiny_desktop_page.rs`：主页入口及静态触控板页面。
-- `src/tiny_desktop_ui.rs`：Core 1 将完整多点 GT911 报告送入手势处理。
-- `src/desktop.rs`：32 项跨核报告队列；拥塞时丢弃旧运动，并先释放再提交最新状态。
-- `src/bin/apps/desktop/runtime.rs`：Core 0 独立 HID future 发报告，不在 USB 中断内处理手势。
+- `src/desktop/touchpad.rs`：手势状态、区域定义和六字节 HID 报告描述符。
+- `src/desktop/page.rs`：主页入口及静态触控板页面。
+- `src/desktop/display.rs`：Core 1 将完整多点 GT911 报告送入手势处理。
+- `src/desktop/mod.rs`：32 项跨核报告队列；拥塞时丢弃旧运动，并先释放再提交最新状态。
+- `src/bin/apps/desktop_runtime.rs`：Core 0 独立 HID future 发报告，不在 USB 中断内处理手势。
 
 报告为按钮位 + 有符号 16 位 X/Y 相对位移 + 有符号 8 位滚轮，无 Report ID。
 增加一个 HID 接口和一个 interrupt IN 端点（6 字节，1 ms）；现有接口编号保持不变。

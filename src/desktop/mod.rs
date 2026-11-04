@@ -1,4 +1,19 @@
 //! Shared desktop state. Core 0 owns USB/radio; core 1 owns display and touch.
+pub mod controls;
+pub mod display;
+pub mod home_image;
+pub mod page;
+pub mod password_keyboard;
+#[cfg(feature = "pocket-ui")]
+pub mod pocket;
+pub mod protocol;
+pub mod settings;
+#[cfg(feature = "slint-ui")]
+pub mod slint;
+#[cfg(feature = "slint-ui")]
+pub mod slint_backend;
+pub mod touchpad;
+
 use crate::keyboard::Keymap;
 use core::cell::RefCell;
 use critical_section::Mutex;
@@ -38,7 +53,7 @@ pub struct View {
     pub revision: u32,
 }
 pub struct Shared {
-    pub settings: crate::desktop_settings::Settings,
+    pub settings: crate::desktop::settings::Settings,
     pub reset_requested: bool,
     pub ble_enable_command: Option<bool>,
     pub wifi_busy: bool,
@@ -51,7 +66,7 @@ pub struct Shared {
     pub pointer_reports: Deque<[u8; 6], 32>,
 }
 impl Shared {
-    pub fn new(keymap: Keymap, settings: crate::desktop_settings::Settings) -> Self {
+    pub fn new(keymap: Keymap, settings: crate::desktop::settings::Settings) -> Self {
         Self {
             ble_name_command: None,
             ble_enable_command: None,

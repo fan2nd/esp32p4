@@ -10,3 +10,6 @@ if ($Bun -eq "bun" -and !(Get-Command bun -ErrorAction SilentlyContinue)) {
 }
 & $Bun $compiler build (Join-Path $ui "Desktop.vue") --strict
 if ($LASTEXITCODE -ne 0) { throw "MicroTS compilation failed." }
+
+# The firmware imports desktop.rs directly; discard the redundant export index.
+Remove-Item -LiteralPath (Join-Path $ui "gen/mod.rs") -ErrorAction SilentlyContinue

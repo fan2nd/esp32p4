@@ -7,7 +7,7 @@ use microts::{Input, Ui};
 use pocket_drivers::DamageRect;
 use tiny_ui::{Scene, Widget};
 
-#[path = "../assets/ui/pocket/gen/mod.rs"]
+#[path = "../../assets/ui/pocket/gen/desktop.rs"]
 mod generated;
 use generated::{Color, DesktopApp, DesktopProps, DesktopViewModel, Item, Px};
 
@@ -21,7 +21,7 @@ static HEAP: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHe
 pub unsafe fn init_heap(ptr: *mut u8) {
     #[cfg(feature = "slint-ui")]
     unsafe {
-        crate::slint_backend::HEAP.lock().init(ptr, HEAP_SIZE);
+        crate::desktop::slint_backend::HEAP.lock().init(ptr, HEAP_SIZE);
     }
     #[cfg(not(feature = "slint-ui"))]
     unsafe {
@@ -53,11 +53,11 @@ fn color(c: Rgb565) -> Color {
 impl Painter {
     pub fn new() -> Self {
         let mut ui = Ui::new();
-        assert!(ui.load_styles(include_bytes!("../assets/ui/pocket/gen/styles.bin")));
+        assert!(ui.load_styles(include_bytes!("../../assets/ui/pocket/gen/styles.bin")));
         ui.core_mut().set_viewport(360., 640.);
         assert!(
             ui.core_mut()
-                .load_font_atlas(include_bytes!("../assets/ui/pocket/inter16.bin"))
+                .load_font_atlas(include_bytes!("../../assets/ui/pocket/inter16.bin"))
         );
         Self {
             app: DesktopApp::new(ui, DesktopProps {}, Model::default()),

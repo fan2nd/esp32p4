@@ -4,8 +4,8 @@
 
 ## 当前结构
 
-- `src/desktop.rs`：跨核状态 `View`、网络命令 `Command`、键盘报告队列及短临界区访问。
-- `src/desktop_ui.rs`：第二核的页面状态、控件绘制、触摸命中判断、键盘交互和刷新循环。
+- `src/desktop/mod.rs`：跨核状态 `View`、网络命令 `Command`、键盘报告队列及短临界区访问。
+- `src/desktop/slint.rs`：第二核的页面状态、控件绘制、触摸命中判断、键盘交互和刷新循环。
   `Page` 分为 Home、Settings、Password、Keyboard；`Ui` 保存页码、密码、键盘层和按键状态。
 - `embedded-graphics` 负责文字、矩形、圆角等绘图；当前 `button()` 只是绘制函数，没有统一控件对象、事件分发或布局系统。
 - 逻辑画布 360×640，放大两倍输出到 720×1280。内部 SRAM 使用 32 行 RGB888 条带，转换为显示需要的 BGR565 后写 PSRAM 双缓冲。

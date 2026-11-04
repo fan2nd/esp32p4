@@ -1,5 +1,5 @@
 #![no_std]
 #![no_main]
 
-use waveshare_p4_eth::desktop_ui as desktop_renderer;
-include!("desktop/runtime.rs");
+mod desktop_runtime;
+const DISPLAY: desktop_runtime::Display = waveshare_p4_eth::desktop::slint::run;

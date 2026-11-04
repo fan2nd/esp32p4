@@ -1,11 +1,11 @@
 //! Core 1 Rust-component backend for the composite desktop firmware.
 //! USB/audio/network/storage remain in the same Core 0 implementation as Slint.
 use crate::{
+    desktop::controls::MacroController,
+    desktop::page::{Action, HEIGHT, Network, Ui, WIDTH},
     desktop::{self, Command},
-    desktop_controls::MacroController,
     driver::{display, touch::Gt911},
     keyboard,
-    tiny_desktop_page::{Action, HEIGHT, Network, Ui, WIDTH},
 };
 use core::{convert::Infallible, fmt::Write};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
@@ -237,61 +237,42 @@ fn dispatch(ui: &mut Ui, event: Event, i2c: &mut I2c<'_, Blocking>) {
     }
 }
 
-pub fn run(
+pub fn run<const POCKET: bool>(
     dsi: MIPI_DSI<'static>,
     vdma: VDMA_CH0<'static>,
     psram: PSRAM<'static>,
     i2c: I2c<'static, Blocking>,
-) -> ! {
-    run_backend(dsi, vdma, psram, i2c, false)
-}
-
-#[cfg(feature = "pocket-ui")]
-pub fn run_pocket(
-    dsi: MIPI_DSI<'static>,
-    vdma: VDMA_CH0<'static>,
-    psram: PSRAM<'static>,
-    i2c: I2c<'static, Blocking>,
-) -> ! {
-    run_backend(dsi, vdma, psram, i2c, true)
-}
-
-fn run_backend(
-    dsi: MIPI_DSI<'static>,
-    vdma: VDMA_CH0<'static>,
-    psram: PSRAM<'static>,
-    i2c: I2c<'static, Blocking>,
-    pocket: bool,
 ) -> ! {
     let memory = Psram::new(psram, PsramConfig::default());
     let (ptr, len) = memory.raw_parts();
-    assert!(len >= FRAME * 2 + crate::home_image::ARENA);
+    assert!(len >= FRAME * 2 + crate::desktop::home_image::ARENA);
     // Both rendering paths share the same fixed-size PSRAM scanout buffers.
     let framebuffer = unsafe { core::slice::from_raw_parts_mut(ptr, FRAME * 2) };
     #[cfg(feature = "pocket-ui")]
-    if pocket {
+    if POCKET {
         // Heap follows both scanout buffers and the persistent image arena.
-        let offset = (FRAME * 2 + crate::home_image::ARENA + 15) & !15;
-        assert!(len >= offset + crate::pocket_desktop::HEAP_SIZE);
+        let offset = (FRAME * 2 + crate::desktop::home_image::ARENA + 15) & !15;
+        assert!(len >= offset + crate::desktop::pocket::HEAP_SIZE);
         unsafe {
-            crate::pocket_desktop::init_heap(ptr.add(offset));
+            crate::desktop::pocket::init_heap(ptr.add(offset));
         }
     }
     #[cfg(not(feature = "pocket-ui"))]
-    let _ = pocket;
+    assert!(!POCKET, "PocketJS requires the pocket-ui feature");
     let mut ui = Ui::new();
     #[cfg(feature = "pocket-ui")]
-    if pocket {
+    if POCKET {
         // Keep the retained PocketJS state off the fixed 64 KiB screen stack.
         ui.pocket = Some(alloc::boxed::Box::new(core::cell::RefCell::new(
-            crate::pocket_desktop::Painter::new(),
+            crate::desktop::pocket::Painter::new(),
         )));
     }
-    let arena =
-        unsafe { core::slice::from_raw_parts_mut(ptr.add(FRAME * 2), crate::home_image::ARENA) };
-    ui.home = Some(crate::home_image::Player::new(crate::home_image::init(
-        arena,
-    )));
+    let arena = unsafe {
+        core::slice::from_raw_parts_mut(ptr.add(FRAME * 2), crate::desktop::home_image::ARENA)
+    };
+    ui.home = Some(crate::desktop::home_image::Player::new(
+        crate::desktop::home_image::init(arena),
+    ));
     let (front, back) = framebuffer.split_at_mut(FRAME);
     ui.render_full(&mut Panel(front)).unwrap();
     ui.render_full(&mut Panel(back)).unwrap();
@@ -322,7 +303,7 @@ fn run_backend(
     let mut last_probe = 0u64;
     let mut mask = 0u8;
     let mut macros = MacroController::default();
-    let mut touchpad = crate::touchpad::Touchpad::default();
+    let mut touchpad = crate::desktop::touchpad::Touchpad::default();
     let mut previous_dirty: Option<Rectangle> = None;
     let mut revision = u32::MAX;
     let mut shown_second = u64::MAX;
@@ -335,7 +316,8 @@ fn run_backend(
             touch = Gt911::probe(&mut i2c);
             last_probe = now;
         }
-        let pointer_enabled = ui.page() == crate::touchpad::PAGE && desktop::with(|s| s.view.usb);
+        let pointer_enabled =
+            ui.page() == crate::desktop::touchpad::PAGE && desktop::with(|s| s.view.usb);
         if !pointer_enabled {
             touchpad.cancel(|report| desktop::with(|s| s.pointer_report(report)));
         }

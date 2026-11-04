@@ -48,9 +48,9 @@ export component DesktopWindow inherits Window {
         background: #e8f7ff;
         Text { x: 12px; y: 12px; text: root.clock; font-size: 44px; color: #182d44; }
         Button { x: 296px; y: 8px; width: 54px; height: 36px; text: "SET"; clicked => { root.navigate(1); } }
-        Image { x: 16px; y: 76px; width: 30px; height: 30px; source: @image-url("../status-wifi.svg"); opacity: root.wifi-ready ? 1 : 0.25; }
-        Image { x: 66px; y: 76px; width: 30px; height: 30px; source: @image-url("../status-bluetooth.svg"); opacity: root.bluetooth-ready ? 1 : 0.25; }
-        Image { x: 116px; y: 76px; width: 30px; height: 30px; source: @image-url("../status-usb.svg"); opacity: root.usb-ready ? 1 : 0.25; }
+        Image { x: 16px; y: 76px; width: 30px; height: 30px; source: @image-url("../material-icons/wifi.svg"); colorize: root.wifi-ready ? #267b9a : #b8cdd5; }
+        Image { x: 66px; y: 76px; width: 30px; height: 30px; source: @image-url("../material-icons/bluetooth.svg"); colorize: root.bluetooth-ready ? #267b9a : #b8cdd5; }
+        Image { x: 116px; y: 76px; width: 30px; height: 30px; source: @image-url("../material-icons/usb.svg"); colorize: root.usb-ready ? #267b9a : #b8cdd5; }
         Text { x: 12px; y: 122px; text: root.ip-address; font-size: 15px; color: #182d44; }
         Image { x: 5px; y: 170px; width: 350px; height: 326px; source: root.whale; image-fit: contain; }
         Button { x: 70px; y: 566px; width: 220px; height: 50px; text: "KEYBOARD"; clicked => { root.navigate(3); } }

@@ -26,7 +26,7 @@ use sequential_storage::{
     cache::Cache,
     map::{MapConfig, MapStorage},
 };
-use waveshare_p4_eth::desktop_settings::{KV_END, KV_KEY, KV_START, LEGACY_RECORD, Settings};
+use waveshare_p4_eth::desktop::settings::{KV_END, KV_KEY, KV_START, LEGACY_RECORD, Settings};
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
     waveshare_p4_eth::diagnostic!(
@@ -64,6 +64,14 @@ esp_bootloader_esp_idf::esp_app_desc!();
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 static SCREEN_STACK: StaticCell<Stack<65536>> = StaticCell::new();
 static SDHOST: StaticCell<SdHostController<'static>> = StaticCell::new();
+/// The binary selects its renderer directly; no forwarding entry function.
+pub type Display = fn(
+    esp_hal::peripherals::MIPI_DSI<'static>,
+    esp_hal::peripherals::VDMA_CH0<'static>,
+    esp_hal::peripherals::PSRAM<'static>,
+    I2c<'static, esp_hal::Blocking>,
+) -> !;
+
 // Composite UI workloads can delay a poll by 3-5 ms. Keep 8 ms of USB PCM
 // queued before consuming it; 4 ms left no margin for a delayed packet batch.
 const TARGET: usize = 128;
@@ -88,7 +96,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     // esp-storage's default checks CPU clock state, not this cooperative park.
     let mut flash = unsafe { FlashStorage::new(p.FLASH).multicore_ignore() };
     let mut keymap = Keymap::default();
-    let mut settings = waveshare_p4_eth::desktop_settings::Settings::default();
+    let mut settings = waveshare_p4_eth::desktop::settings::Settings::default();
     let mut generation = 0u32;
     let mut restored = false;
     let mut table = [0; 0xc00];
@@ -235,7 +243,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     let mut cpu = CpuControl::new(p.CPU_CTRL);
     let _screen_guard = cpu
         .start_app_core(SCREEN_STACK.init(Stack::new()), move || {
-            desktop_renderer::run(p.MIPI_DSI, p.VDMA_CH0, p.PSRAM, i2c)
+            crate::DISPLAY(p.MIPI_DSI, p.VDMA_CH0, p.PSRAM, i2c)
         })
         .unwrap();
     let host = SDHOST.init(SdHostController::new(p.SDHOST, SdConfig::default()).unwrap());
@@ -354,7 +362,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         &mut builder,
         &mut pointer_state,
         HidConfig {
-            report_descriptor: waveshare_p4_eth::touchpad::DESCRIPTOR,
+            report_descriptor: waveshare_p4_eth::desktop::touchpad::DESCRIPTOR,
             request_handler: None,
             poll_ms: 1,
             max_packet_size: 6,

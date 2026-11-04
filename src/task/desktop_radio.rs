@@ -529,7 +529,7 @@ async fn wifi(control: &mut embassy_net_esp_hosted::Control<'_>, stack: Stack<'s
                                 }
                                 s.settings
                                     .profiles
-                                    .push(crate::desktop_settings::WifiProfile {
+                                    .push(crate::desktop::settings::WifiProfile {
                                         ssid: ssid.clone(),
                                         password: password.clone(),
                                     })
@@ -644,7 +644,7 @@ async fn sync_time(stack: Stack<'static>) -> Option<u64> {
             if meta.endpoint.addr != *address || meta.endpoint.port != 123 {
                 continue;
             }
-            if let Some(utc) = crate::desktop_protocol::ntp_utc(&reply[..n], nonce) {
+            if let Some(utc) = crate::desktop::protocol::ntp_utc(&reply[..n], nonce) {
                 log::info!("desktop: SNTP synchronized");
                 return Some(utc);
             }

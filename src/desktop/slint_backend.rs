@@ -7,7 +7,10 @@ use slint::platform::{
     software_renderer::{LineBufferProvider, MinimalSoftwareWindow, Rgb565Pixel},
 };
 
-slint::include_modules!();
+// build.rs generates this regular module before rustc runs.
+#[path = "../../target/generated/slint.rs"]
+mod generated;
+pub use generated::*;
 
 #[global_allocator]
 pub static HEAP: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();

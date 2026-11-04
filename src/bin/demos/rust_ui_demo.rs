@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-//! Pure Rust component-framework showcase matching assets/ui/demo.slint geometry.
+//! Pure Rust component-framework showcase with sliders, a dropdown and a scrolling list.
 use core::{
     convert::Infallible,
     sync::atomic::{AtomicU32, Ordering},
@@ -16,10 +16,11 @@ use esp_hal::{
     time::Instant,
 };
 use riscv_rt::entry;
+use rust_ui_page as page;
 use static_cell::StaticCell;
-#[path = "rust_ui_demo/page.rs"]
-mod page;
-use page::{Action, Event, Ui};
+mod rust_ui_page;
+use page::{Action, Ui};
+use tiny_ui::Event;
 use waveshare_p4_eth::driver::{display, touch::Gt911};
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -105,8 +106,8 @@ fn main() -> ! {
             fb.fill(0);
             let mut ui = Ui::new();
             let (front, back) = fb.split_at_mut(FRAME);
-            ui.render(&mut Panel(front)).unwrap();
-            ui.render_full(&mut Panel(back)).unwrap();
+            ui.scene.render(&mut Panel(front)).unwrap();
+            ui.scene.render_full(&mut Panel(back)).unwrap();
             let i2c = I2c::new(p.I2C1, Config::default())
                 .unwrap()
                 .with_sda(p.GPIO7)
@@ -172,11 +173,12 @@ fn main() -> ! {
                     contact = None;
                     suppressed = true;
                 }
-                if let Some(dirty) = ui.dirty() {
+                if let Some(dirty) = ui.scene.damage() {
                     let mut target = Panel(dpi.framebuffer_mut());
                     // This back buffer is one UI update behind. Repair the previous
                     // update too; otherwise alternating buffers resurrect stale pixels.
-                    ui.render_with_extra_damage(&mut target, previous_dirty)
+                    ui.scene
+                        .render_with_extra_damage(&mut target, previous_dirty)
                         .unwrap();
                     previous_dirty = Some(dirty);
                     dpi.commit();

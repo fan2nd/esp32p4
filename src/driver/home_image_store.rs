@@ -1,7 +1,7 @@
 //! Power-loss-safe image slots. Flash ownership remains with the desktop KV task.
 use crate::{
     desktop,
-    home_image::{self as image, Item},
+    desktop::home_image::{self as image, Item},
 };
 use core::sync::atomic::Ordering;
 use embassy_futures::yield_now;

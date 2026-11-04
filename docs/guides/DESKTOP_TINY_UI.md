@@ -1,7 +1,7 @@
 # 纯 Rust 组件桌面
 
 `desktop_tiny_ui` 是完整桌面程序的第二个 UI 后端，参考的是
-`assets/ui/desktop.slint`，不是滑条/按钮展示页 `assets/ui/demo.slint`。
+`assets/ui/desktop.slint`。
 原 Slint `desktop` bin 保留，二者共用 Core 0 的 USB、音频、无线和存储实现。
 
 ## 构建与运行
@@ -110,10 +110,10 @@ DMA 未重启。保存可以在播放时完成，但页回收尚不能保证无�
 ## 代码边界
 
 - `3rd/tiny-ui`：可复用 no_std、无 alloc 组件框架，不依赖板级 HAL 或桌面业务。
-- `src/tiny_desktop_page.rs`：桌面页面组合、界面状态、输入与业务动作。
-- `src/tiny_desktop_ui.rs`：Core 1 屏幕/触摸适配和共享业务状态桥接。
-- `src/desktop_controls.rs`：两种 UI 共用的无分配宏键盘控制器，保持多键和宏定时语义。
-- `src/bin/apps/desktop/runtime.rs`：两个 bin 共用的 Core 0 固件入口与服务。
+- `src/desktop/page.rs`：桌面页面组合、界面状态、输入与业务动作。
+- `src/desktop/display.rs`：Core 1 屏幕/触摸适配和共享业务状态桥接。
+- `src/desktop/controls.rs`：两种 UI 共用的无分配宏键盘控制器，保持多键和宏定时语义。
+- `src/bin/apps/desktop_runtime.rs`：两个 bin 共用的 Core 0 固件入口与服务。
 - `src/bin/apps/desktop_tiny_ui.rs`：选择纯 Rust 后端。
 - `src/bin/apps/desktop.rs`：选择原 Slint 后端。
 

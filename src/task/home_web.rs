@@ -1,5 +1,5 @@
 //! Picoserve routes for desktop assets, settings and bounded streaming uploads.
-use crate::{desktop, home_image as image};
+use crate::{desktop, desktop::home_image as image};
 use embassy_net::{Stack, tcp::TcpSocket};
 use embassy_time::{Duration, Timer, with_timeout};
 use picoserve::{

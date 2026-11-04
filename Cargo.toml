@@ -109,11 +109,6 @@ name = "rust_ui_demo"
 path = "src/bin/demos/rust_ui_demo.rs"
 
 [[bin]]
-name = "slint_demo"
-path = "src/bin/demos/slint_demo.rs"
-required-features = ["slint-ui"]
-
-[[bin]]
 name = "display_core1"
 path = "src/bin/demos/display_core1.rs"
 

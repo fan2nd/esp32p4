@@ -1,7 +1,7 @@
 # 仓库结构与迁移
 
 本次整理调整目录、Cargo 入口注册和文档导航，并将 UI 框架与演示应用分离。
-保留所有应用、演示、硬件验证程序。`3rd/` 仅保留 tiny-ui 与三个实际使用的本地补丁依赖。
+保留所有应用、演示、硬件验证程序。`3rd/` 保留 tiny-ui、PocketJS/MicroTS 源码子集及实际使用的本地补丁依赖。
 本次另将 esp-hal 从 1.2.0 升级到 1.2.2，保留 P4 缓存/DMA 补丁；USB OTG 0.4.0 已是最新稳定发布，保留其全速补丁。
 
 ## 固件入口
@@ -10,12 +10,14 @@
 名称与 feature 要求保持不变，既有 `cargo ... --bin <name>` 命令仍然适用。
 不指定 `--bin` 时，`cargo run` 现在明确选择基础 `main`。
 
-- `src/bin/apps/`：`main`、`desktop`、`desktop_tiny_ui`、`keyboard`、`usb_audio`。
-- `src/bin/demos/`：`rust_ui_demo`、`slint_demo`、`display_core1`、`wifi_ble`、`pet`。
+- `src/bin/apps/`：`main`、`desktop`、`desktop_tiny_ui`、`desktop_pocket_ui`、`keyboard`、`usb_audio`。
+- `src/bin/demos/`：`rust_ui_demo`、`display_core1`、`wifi_ble`、`pet`。
 - `src/bin/verify/`：`verify_display`、`verify_touch`、`verify_audio`、`verify_usb`、`verify_hosted`。
 
-`desktop` 与 `desktop_tiny_ui` 共用 `src/bin/apps/desktop/runtime.rs` 的 Core 0 服务，
-分别选择 Slint 与纯 Rust 组件 UI 后端，详见 [纯 Rust 完整桌面](guides/DESKTOP_TINY_UI.md)。
+`desktop`、`desktop_tiny_ui` 和 `desktop_pocket_ui` 通过常规模块
+`mod desktop_runtime;` 共用 `src/bin/apps/desktop_runtime.rs` 的 Core 0 服务。
+入口用 `DISPLAY` 函数指针直接选择渲染函数，不使用源码拼接宏或转发函数。
+详见 [纯 Rust 完整桌面](guides/DESKTOP_TINY_UI.md) 与 [PocketJS 桌面](guides/POCKET_UI.md)。
 
 共享板级配置、驱动、异步任务及库模块仍在原位置。固件原先的源文件路径
 `src/bin/<name>.rs` 改成上述分类路径；外部 IDE 配置若硬编码了源文件路径需同步。
@@ -36,7 +38,7 @@
 
 - `assets/`（含 `assets/ui/`）仍供原有固件使用，未删除字体、图像或授权文件。
 - `3rd/esp-hal/`、`3rd/embassy-usb-synopsys-otg/`、`3rd/embassy-net-esp-hosted/` 包含实际依赖的本地补丁，不是可以随意清理的下载缓存。
-- `3rd/tiny-ui/` 提供独立 UI 框架；根 bin `src/bin/demos/rust_ui_demo.rs` 直接依赖框架，页面模块在 `src/bin/demos/rust_ui_demo/page.rs`，不另设演示 crate。
+- `3rd/tiny-ui/` 提供独立 UI 框架；根 bin `src/bin/demos/rust_ui_demo.rs` 直接依赖框架，页面模块在 `src/bin/demos/rust_ui_page.rs`，不另设演示 crate。
 - 项目自有测试、`tests/` 与独立主机测试包已移除；实机辅助脚本放到 `tools/`，`src/bin/verify/` 保留板上验证固件。
 - `target/` 是忽略的本地构建产物，没有加入版本控制。
 
@@ -49,8 +51,8 @@
 - tiny-ui 格式检查、主机严格 Clippy 与 RISC-V no_std 编译检查通过。
 - 仓库内非第三方依赖 Markdown 相对链接检查通过。
 
-根 `rust_ui_demo` bin 与 `slint_demo` 一样直接组织演示，依赖 `3rd/tiny-ui`，
-组合页面位于 `src/bin/demos/rust_ui_demo/page.rs`。没有独立 HTTP/浏览器预览包。
+根 `rust_ui_demo` bin 直接组织演示，依赖 `3rd/tiny-ui`，
+组合页面位于 `src/bin/demos/rust_ui_page.rs`。没有独立 HTTP/浏览器预览包。
 现有截图仅作渲染参考。
 
 以上不代表仓库 CI、全库 lint 或真机验证通过。显示颜色、真实触摸、音频/无线共存、
@@ -69,3 +71,38 @@
 第三方驱动的上游嵌入测试不做无关修改。后续采用构建、静态检查与手动硬件验证，
 不把历史验证结果当作当前改动的实测结果。
 VIA、USB 音频播放/采集辅助工具迁到 `tools/`，用法见 [工具说明](../tools/README.md)。
+
+## Rust 源码组织约束（2026-11-04）
+
+项目自有代码禁止使用 `include!`，也禁止借包装宏间接包含 `.rs`。
+共享代码使用 `mod` / `#[path]` / `use`，资源仍可使用 `include_bytes!` / `include_str!`。
+约束已写入根目录 AGENTS.md；第三方上游内部实现不在本次改写范围。
+
+Slint 的 `include_modules!` 内部调用 `include!`，因此也已移除。
+启用 `slint-ui` 时，build.rs 先正常执行官方编译器，再将生成结果放到忽略的
+`target/generated/slint.rs`，由 `slint_backend.rs` 的 `#[path] mod generated` 加载。
+这是派生文件，不提交、不手改；构建会重新生成并保留输入资源依赖跟踪。
+即使设置 `CARGO_TARGET_DIR`，此模块位置仍固定在仓库的 target/generated 下。
+PocketJS 已生成的 Rust 模块继续使用现有 `#[path]`，不需要调整。
+
+本次为源码组织调整，使用发布构建和宏用法扫描验证；未重新烧录硬件。
+
+## 桌面模块归并（2026-11-04）
+
+`src/desktop/` 集中同一应用的状态和页面模块，不再在 src 根目录重复 desktop 前缀：
+
+- `mod.rs`：共用状态与跨核协调；`settings.rs`、`protocol.rs`、`controls.rs`：配置、VIA 协议和按键控制。
+- `page.rs`、`display.rs`：共用页面状态/覆盖层与显示触摸循环。
+- `slint.rs`、`slint_backend.rs`、`pocket.rs`：各 UI 后端与实际渲染适配。
+- `home_image.rs`、`password_keyboard.rs`、`touchpad.rs`：图片播放、密码键盘和手势处理。
+
+`src/bin/apps/desktop_runtime.rs` 继续承载共用 Core 0 运行逻辑。三个固件入口通过
+`DISPLAY` 函数指针绑定实际渲染函数，Tiny/Pocket 直接选择 `display::run::<false/true>`，
+移除 run/run_pocket 到 run_backend 的单次转发。
+
+`src/bin/demos/rust_ui_demo/page.rs` 已扁平化为 `src/bin/demos/rust_ui_page.rs`。
+页面保留状态和动作处理，固件直接调用其 scene 的绘制/损伤接口，不重复包装这些方法。
+PocketJS 直接引用生成的 `gen/desktop.rs`；生成工具移除仅转导出的 gen/mod.rs。
+
+保留带真实职责的包装：Hosted 协议兼容、SDIO 日志诊断、USB 接口适配、跨核同步以及
+trait 必需实现。第三方源码布局不作本地重排。本轮仅整理组织边界，未新增测试或重新烧录。

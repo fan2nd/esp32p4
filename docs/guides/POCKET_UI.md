@@ -3,15 +3,15 @@
 ## 入口与实现范围
 
 新增 `desktop_pocket_ui`，使用 `pocket-ui` feature。保留 `desktop_tiny_ui` 和 Slint `desktop`。
-三个入口复用 `src/bin/apps/desktop/runtime.rs`：USB 键盘/VIA、喇叭、麦克风、触控板、
+三个入口复用 `src/bin/apps/desktop_runtime.rs`：USB 键盘/VIA、喇叭、麦克风、触控板、
 双 LUN MSC、Wi-Fi/BLE、网页图片、天气、KV 和手动校时的服务不另写一套。
 
 本版是共用页面模型的 PocketJS 渲染适配，不是把全部业务重写成 TypeScript：
-- `tiny_desktop_page.rs` 继续维护页面状态、坐标、触摸捕获、滑动列表、密码键盘及业务动作。
+- `src/desktop/page.rs` 继续维护页面状态、坐标、触摸捕获、滑动列表、密码键盘及业务动作。
 - `assets/ui/pocket/Desktop.vue` 和 `Desktop.d.ts` 是 MicroTS 视图与类型契约；
   官方编译器产生 `gen/*.rs` 和 `styles.bin`，通过 PocketJS retained core 和软件渲染器绘制按钮、卡片、列表边框、滚动指示条和滑条。
 - 时钟 Inter 数字、状态图标、SSID/CJK、天气、键名和动态主页图片仍共用已有覆盖层，保持资源和显示效果。
-- `src/pocket_desktop.rs` 将页面控件状态传入生成视图。触摸仍由原有交互状态机处理，
+- `src/desktop/pocket.rs` 将页面控件状态传入生成视图。触摸仍由原有交互状态机处理，
   不同时运行第二个事件系统；MicroTS 在本版负责 AOT 视图，不运行 JS 引擎。
 
 固件全部是 Rust，不链接 QuickJS、ESP-IDF 或 C/C++。Node/Bun/Python 只用于电脑端资源生成。

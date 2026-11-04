@@ -9,7 +9,6 @@ Waveshare ESP32-P4-ETH / ESP32-P4-NANO-WIFI6-DB 的 Rust 固件、独立演示�
 | --- | --- | --- |
 | 纯 Rust 完整桌面：时钟、多级设置、键盘与 USB 音频 | `desktop_tiny_ui` | [组件桌面](docs/guides/DESKTOP_TINY_UI.md) |
 | 纯 Rust 无 alloc 组件框架：滑条、按钮、下拉、列表 | `rust_ui_demo` | [运行与验证限制](docs/guides/RUST_UI_DEMO.md) |
-| Slint UI 演示 | `slint_demo` + `--features slint-ui` | [Slint demo](docs/guides/SLINT_DEMO.md) |
 | 完整桌面：触摸、USB、音频、无线 | `desktop` + `--features slint-ui` | [桌面固件](docs/guides/DESKTOP.md) |
 | 触摸宏键盘 / VIA | `keyboard` | [键盘与分区表](docs/guides/KEYBOARD.md) |
 | USB 麦克风 / 扬声器 | `usb_audio` | [接线安全与验证](docs/guides/USB_AUDIO.md) |
@@ -32,7 +31,7 @@ Cargo 默认目标是 `riscv32imafc-unknown-none-elf`。项目禁止新增单元
 - `src/bin/demos/`：聚焦单一能力的演示入口。
 - `src/bin/verify/`：硬件验证入口。
 - `src/driver/`、`src/task/`：共享驱动与异步任务；`src/*.rs`：现有公共模块与板级配置。
-- [3rd/tiny-ui](3rd/tiny-ui/README.md)：可复用的无 alloc UI 框架；完整桌面页面在 `src/tiny_desktop_page.rs`，由 `desktop_tiny_ui` 使用；`rust_ui_demo` 保留为组件展示。
+- [3rd/tiny-ui](3rd/tiny-ui/README.md)：可复用的无 alloc UI 框架；完整桌面页面在 `src/desktop/page.rs`，由 `desktop_tiny_ui` 使用；`rust_ui_demo` 保留为组件展示。
 - `assets/`：图像、字体和 `assets/ui/` 下的 Slint 页面。
 - `docs/`：使用指南、硬件说明、设计说明和官方资料，[从索引进入](docs/README.md)。
 - `tools/`：实机辅助脚本与资源生成工具，见 [工具说明](tools/README.md)。

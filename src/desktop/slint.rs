@@ -1,13 +1,13 @@
 //! Slint desktop on core 1; core 0 retains USB/audio/radio and flash persistence.
 use crate::{
-    desktop::{self, AccessPoint, Command},
-    driver::{display, touch::Gt911},
-    desktop_controls::MacroController,
-    keyboard,
-    password_keyboard::{self, Action, Password},
-    slint_backend::{
+    desktop::controls::MacroController,
+    desktop::password_keyboard::{self, Action, Password},
+    desktop::slint_backend::{
         DesktopWindow, FRAME, HEAP, HEAP_SIZE, Lines, MacroKey, Network, Platform, TypingKey,
     },
+    desktop::{self, AccessPoint, Command},
+    driver::{display, touch::Gt911},
+    keyboard,
 };
 use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use core::{cell::RefCell, convert::Infallible, fmt::Write};
@@ -32,8 +32,8 @@ use slint::{
     },
 };
 
-const IMAGE: &[u8] = include_bytes!("../assets/whale-girl-wave-large.rgb");
-const CJK: &[u8] = include_bytes!("../assets/cjk16.bin");
+const IMAGE: &[u8] = include_bytes!("../../assets/whale-girl-wave-large.rgb");
+const CJK: &[u8] = include_bytes!("../../assets/cjk16.bin");
 
 /// Reuse the project's licensed CJK bitmap for dynamic SSIDs. Slint's embedded
 /// font subset cannot anticipate the Chinese characters returned by a scan.
@@ -223,7 +223,9 @@ pub fn run(
     }
     ui.on_sync_time(|| {
         desktop::with(|s| {
-            if s.command.is_none() { s.command = Some(Command::SyncTime); }
+            if s.command.is_none() {
+                s.command = Some(Command::SyncTime);
+            }
         });
     });
     ui.on_scan(|| {

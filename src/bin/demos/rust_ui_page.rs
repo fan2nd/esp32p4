@@ -4,7 +4,7 @@
 //! knows nothing about volume, modes, this screen size, or the ESP32-P4.
 use core::fmt::Write;
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
-pub use tiny_ui::Event;
+use tiny_ui::Event;
 use tiny_ui::{
     ActionKind, Alignment, Button, ComboBox, FontSize, InlineText, Label, ListView, Panel, Scene,
     Slider, Style, Widget, WidgetId,
@@ -58,7 +58,7 @@ pub enum Action {
     Reset,
 }
 pub struct Ui {
-    scene: Scene<10>,
+    pub(crate) scene: Scene<10>,
     state: State,
 }
 impl Default for Ui {
@@ -142,9 +142,6 @@ impl Ui {
             },
         }
     }
-    pub fn dirty(&self) -> Option<Rectangle> {
-        self.scene.damage()
-    }
     pub fn set_volume(&mut self, value: i32) {
         let value = value.clamp(0, 100);
         if value == self.state.volume {
@@ -180,7 +177,7 @@ impl Ui {
             }
         });
     }
-    /// Match assets/ui/demo.slint: reset volume and selection; preserve mode and scroll.
+    /// Reset volume and selection; preserve mode and scroll.
     pub fn reset(&mut self) {
         self.set_volume(35);
         self.state.selected = None;
@@ -214,24 +211,5 @@ impl Ui {
             }
             _ => None,
         }
-    }
-    pub fn render<D: DrawTarget<Color = Rgb565>>(
-        &mut self,
-        target: &mut D,
-    ) -> Result<Option<Rectangle>, D::Error> {
-        self.render_with_extra_damage(target, None)
-    }
-    pub fn render_full<D: DrawTarget<Color = Rgb565>>(
-        &self,
-        target: &mut D,
-    ) -> Result<(), D::Error> {
-        self.scene.render_full(target)
-    }
-    pub fn render_with_extra_damage<D: DrawTarget<Color = Rgb565>>(
-        &mut self,
-        target: &mut D,
-        extra: Option<Rectangle>,
-    ) -> Result<Option<Rectangle>, D::Error> {
-        self.scene.render_with_extra_damage(target, extra)
     }
 }

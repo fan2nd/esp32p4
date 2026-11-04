@@ -1,5 +1,5 @@
 //! Shared desktop page state and overlays; optional PocketJS control rendering.
-use crate::password_keyboard::{self, Password};
+use crate::desktop::password_keyboard::{self, Password};
 use core::fmt::Write;
 use embedded_graphics::{
     mono_font::{
@@ -19,8 +19,8 @@ use tiny_ui::{
 };
 pub const WIDTH: u32 = 360;
 pub const HEIGHT: u32 = 640;
-const WHALE: &[u8] = include_bytes!("../assets/whale-girl-wave-large.rgb");
-const CJK: &[u8] = include_bytes!("../assets/cjk16.bin");
+const WHALE: &[u8] = include_bytes!("../../assets/whale-girl-wave-large.rgb");
+const CJK: &[u8] = include_bytes!("../../assets/cjk16.bin");
 const EMPTY_ROWS: [&str; 64] = [""; 64];
 const BACK: u16 = 1;
 const SETTINGS: u16 = 2;
@@ -103,8 +103,8 @@ pub enum Action {
 }
 pub struct Ui {
     #[cfg(feature = "pocket-ui")]
-    pub(crate) pocket: Option<alloc::boxed::Box<core::cell::RefCell<crate::pocket_desktop::Painter>>>,
-    pub home: Option<crate::home_image::Player>,
+    pub(crate) pocket: Option<alloc::boxed::Box<core::cell::RefCell<crate::desktop::pocket::Painter>>>,
+    pub home: Option<crate::desktop::home_image::Player>,
     scene: Scene<72>,
     page: u8,
     networks: Vec<Network, 64>,
@@ -240,11 +240,11 @@ impl Ui {
                 self.scene.add(list).unwrap();
                 self.button(DISCONNECT, rect(12, 542, 336, 44), "DISCONNECT");
             }
-            crate::touchpad::PAGE => {
+            crate::desktop::touchpad::PAGE => {
                 for (id, area) in [
-                    (46, crate::touchpad::PAD),
-                    (47, crate::touchpad::LEFT),
-                    (48, crate::touchpad::RIGHT),
+                    (46, crate::desktop::touchpad::PAD),
+                    (47, crate::desktop::touchpad::LEFT),
+                    (48, crate::desktop::touchpad::RIGHT),
                 ] {
                     let mut panel = Panel::new(id, area);
                     panel.base.style = style();
@@ -334,7 +334,7 @@ impl Ui {
         }
     }
     pub fn navigate(&mut self, page: u8) -> Option<Action> {
-        if page > crate::touchpad::PAGE {
+        if page > crate::desktop::touchpad::PAGE {
             return None;
         }
         self.password.clear();
@@ -378,7 +378,7 @@ impl Ui {
                 }
             }
             (KEYBOARD, ActionKind::Clicked) => self.navigate(3),
-            (TOUCHPAD, ActionKind::Clicked) => self.navigate(crate::touchpad::PAGE),
+            (TOUCHPAD, ActionKind::Clicked) => self.navigate(crate::desktop::touchpad::PAGE),
             (WIFI_TOGGLE, ActionKind::Clicked) => Some(Action::WifiEnabled(!self.wifi_enabled)),
             (BLE_TOGGLE, ActionKind::Clicked) => Some(Action::BleEnabled(!self.ble_enabled)),
             (SAVED_CONNECT, ActionKind::Clicked) => {
@@ -577,7 +577,7 @@ impl Ui {
         if self.page == 1 && message_changed {
             self.invalidate(rect(12, 118, 336, 28));
         }
-        if (self.page == 3 || self.page == crate::touchpad::PAGE) && status_changed {
+        if (self.page == 3 || self.page == crate::desktop::touchpad::PAGE) && status_changed {
             self.invalidate(rect(16, 600, 328, 25));
         }
     }
@@ -665,7 +665,7 @@ impl Ui {
     }
     fn overlays<D: DrawTarget<Color = Rgb565>>(&self, target: &mut D) -> Result<(), D::Error> {
         match self.page {
-            crate::touchpad::PAGE => {
+            crate::desktop::touchpad::PAGE => {
                 text(target, "TOUCHPAD", Point::new(110, 16), ink())?;
                 for (p, message) in [
                     (Point::new(32, 170), "One finger: move / tap"),
@@ -1046,7 +1046,7 @@ fn ssid<D: DrawTarget<Color = Rgb565>>(
 }
 /// Fixed-width anti-aliased Inter digits keep seconds from shifting the clock.
 fn draw_clock<D: DrawTarget<Color = Rgb565>>(target: &mut D, value: &str) -> Result<(), D::Error> {
-    const FONT: &[u8] = include_bytes!("../assets/clock-inter.a8");
+    const FONT: &[u8] = include_bytes!("../../assets/clock-inter.a8");
     const CELL: usize = 28 * 48;
     for (column, c) in value.bytes().take(8).enumerate() {
         let index = match c {
@@ -1075,9 +1075,9 @@ fn status_icon<D: DrawTarget<Color = Rgb565>>(
         rgb(0xb8, 0xcd, 0xd5)
     };
     let mask: &[u8] = match kind {
-        0 => include_bytes!("../assets/material-icons/wifi.a8"),
-        1 => include_bytes!("../assets/material-icons/bluetooth.a8"),
-        _ => include_bytes!("../assets/material-icons/usb.a8"),
+        0 => include_bytes!("../../assets/material-icons/wifi.a8"),
+        1 => include_bytes!("../../assets/material-icons/bluetooth.a8"),
+        _ => include_bytes!("../../assets/material-icons/usb.a8"),
     };
     AlphaIcon::new(mask, Size::new(30, 30)).draw(d, p, c, background())
 }
