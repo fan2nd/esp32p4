@@ -1,4 +1,4 @@
-//! Allocation-free desktop page composition. Hardware and commands stay outside the UI.
+//! Shared desktop page state and overlays; optional PocketJS control rendering.
 use crate::password_keyboard::{self, Password};
 use core::fmt::Write;
 use embedded_graphics::{
@@ -102,6 +102,8 @@ pub enum Action {
     },
 }
 pub struct Ui {
+    #[cfg(feature = "pocket-ui")]
+    pub(crate) pocket: Option<alloc::boxed::Box<core::cell::RefCell<crate::pocket_desktop::Painter>>>,
     pub home: Option<crate::home_image::Player>,
     scene: Scene<72>,
     page: u8,
@@ -135,6 +137,8 @@ impl Default for Ui {
 impl Ui {
     pub fn new() -> Self {
         let mut v = Self {
+            #[cfg(feature = "pocket-ui")]
+            pocket: None,
             home: None,
             scene: Scene::new(rect(0, 0, WIDTH, HEIGHT), background()),
             page: 0,
@@ -626,6 +630,11 @@ impl Ui {
         &self,
         target: &mut D,
     ) -> Result<(), D::Error> {
+        #[cfg(feature = "pocket-ui")]
+        if let Some(painter) = &self.pocket {
+            painter.borrow_mut().render(&self.scene, target, rect(0, 0, WIDTH, HEIGHT))?;
+            return self.overlays(&mut target.clipped(&rect(0, 0, WIDTH, HEIGHT)));
+        }
         self.scene.render_full(target)?;
         self.overlays(&mut target.clipped(&rect(0, 0, WIDTH, HEIGHT)))
     }
@@ -634,6 +643,17 @@ impl Ui {
         target: &mut D,
         extra: Option<Rectangle>,
     ) -> Result<Option<Rectangle>, D::Error> {
+        #[cfg(feature = "pocket-ui")]
+        if let Some(painter) = &self.pocket {
+            self.scene.invalidate(extra);
+            let damage = self.scene.damage();
+            if let Some(r) = damage {
+                painter.borrow_mut().render(&self.scene, target, r)?;
+                self.overlays(&mut target.clipped(&r))?;
+                self.scene.clear_damage();
+            }
+            return Ok(damage);
+        }
         let damage = self.scene.render_with_extra_damage(target, extra)?;
         if let Some(r) = damage {
             if let Err(e) = self.overlays(&mut target.clipped(&r)) {

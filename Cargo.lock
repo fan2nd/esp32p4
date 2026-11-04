@@ -2367,6 +2367,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
 dependencies = [
  "hash32",
+ "portable-atomic",
  "serde",
  "stable_deref_trait",
 ]
@@ -2602,7 +2603,7 @@ dependencies = [
  "strum 0.28.0",
  "swash",
  "sys-locale",
- "taffy",
+ "taffy 0.10.1",
  "unicode-linebreak",
  "unicode-script",
  "unicode-segmentation",
@@ -3391,6 +3392,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "microts"
+version = "0.16.0"
+dependencies = [
+ "heapless 0.8.0",
+ "libm",
+ "pocket-spec",
+ "pocketjs-core",
+ "portable-atomic",
+ "ryu-js",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4152,6 +4165,61 @@ dependencies = [
 ]
 
 [[package]]
+name = "pocket-drivers"
+version = "0.16.0"
+dependencies = [
+ "pocket-spec",
+]
+
+[[package]]
+name = "pocket-media"
+version = "0.16.0"
+dependencies = [
+ "pocket-spec",
+]
+
+[[package]]
+name = "pocket-package"
+version = "0.16.0"
+dependencies = [
+ "pocket-drivers",
+ "pocket-spec",
+]
+
+[[package]]
+name = "pocket-raster"
+version = "0.16.0"
+dependencies = [
+ "pocket-drivers",
+ "pocket-render",
+ "pocket-spec",
+]
+
+[[package]]
+name = "pocket-render"
+version = "0.16.0"
+dependencies = [
+ "pocket-drivers",
+ "pocket-spec",
+]
+
+[[package]]
+name = "pocket-spec"
+version = "0.16.0"
+
+[[package]]
+name = "pocketjs-core"
+version = "0.16.0"
+dependencies = [
+ "pocket-drivers",
+ "pocket-media",
+ "pocket-package",
+ "pocket-render",
+ "pocket-spec",
+ "taffy 0.11.0",
+]
+
+[[package]]
 name = "polling"
 version = "3.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4606,6 +4674,12 @@ name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+
+[[package]]
+name = "ryu-js"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04d056b875a9d2e6cb9a61d127afee9ac5999b9f87bcb32079d1318e505be714"
 
 [[package]]
 name = "same-file"
@@ -5204,6 +5278,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "taffy"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfde4e2f8595f222ceaae1fb16b4963952e9b33e358869dc4cd6316b0e0790cd"
+dependencies = [
+ "arrayvec",
+ "serde",
+ "slotmap",
+]
+
+[[package]]
 name = "tar"
 version = "0.4.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5737,8 +5822,11 @@ dependencies = [
  "heapless 0.9.3",
  "linked_list_allocator",
  "log",
+ "microts",
  "panic-halt",
  "picoserve",
+ "pocket-drivers",
+ "pocket-raster",
  "postcard",
  "riscv",
  "riscv-rt",

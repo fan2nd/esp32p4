@@ -243,12 +243,50 @@ pub fn run(
     psram: PSRAM<'static>,
     i2c: I2c<'static, Blocking>,
 ) -> ! {
+    run_backend(dsi, vdma, psram, i2c, false)
+}
+
+#[cfg(feature = "pocket-ui")]
+pub fn run_pocket(
+    dsi: MIPI_DSI<'static>,
+    vdma: VDMA_CH0<'static>,
+    psram: PSRAM<'static>,
+    i2c: I2c<'static, Blocking>,
+) -> ! {
+    run_backend(dsi, vdma, psram, i2c, true)
+}
+
+fn run_backend(
+    dsi: MIPI_DSI<'static>,
+    vdma: VDMA_CH0<'static>,
+    psram: PSRAM<'static>,
+    i2c: I2c<'static, Blocking>,
+    pocket: bool,
+) -> ! {
     let memory = Psram::new(psram, PsramConfig::default());
     let (ptr, len) = memory.raw_parts();
     assert!(len >= FRAME * 2 + crate::home_image::ARENA);
-    // No UI heap: just the same two fixed-size PSRAM scanout buffers.
+    // Both rendering paths share the same fixed-size PSRAM scanout buffers.
     let framebuffer = unsafe { core::slice::from_raw_parts_mut(ptr, FRAME * 2) };
+    #[cfg(feature = "pocket-ui")]
+    if pocket {
+        // Heap follows both scanout buffers and the persistent image arena.
+        let offset = (FRAME * 2 + crate::home_image::ARENA + 15) & !15;
+        assert!(len >= offset + crate::pocket_desktop::HEAP_SIZE);
+        unsafe {
+            crate::pocket_desktop::init_heap(ptr.add(offset));
+        }
+    }
+    #[cfg(not(feature = "pocket-ui"))]
+    let _ = pocket;
     let mut ui = Ui::new();
+    #[cfg(feature = "pocket-ui")]
+    if pocket {
+        // Keep the retained PocketJS state off the fixed 64 KiB screen stack.
+        ui.pocket = Some(alloc::boxed::Box::new(core::cell::RefCell::new(
+            crate::pocket_desktop::Painter::new(),
+        )));
+    }
     let arena =
         unsafe { core::slice::from_raw_parts_mut(ptr.add(FRAME * 2), crate::home_image::ARENA) };
     ui.home = Some(crate::home_image::Player::new(crate::home_image::init(

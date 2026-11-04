@@ -2,8 +2,11 @@
 // Picoserve router types nested in the concurrent Embassy server futures.
 #![recursion_limit = "256"]
 
-#[cfg(feature = "slint-ui")]
+#[cfg(any(feature = "slint-ui", feature = "pocket-ui"))]
 extern crate alloc;
+
+#[cfg(feature = "pocket-ui")]
+pub mod pocket_desktop;
 
 pub mod board;
 pub mod diagnostics;

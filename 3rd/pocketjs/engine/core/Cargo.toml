@@ -1,0 +1,43 @@
+# pocketjs-core — the platform-agnostic retained UI core (tree, style, taffy
+# layout, text, animation, draw-list emission). #![no_std] + alloc by default
+# so the same crate builds for mipsel-sony-psp, wasm32-unknown-unknown and the
+# host. See ../../../docs/DESIGN.md.
+#
+[package]
+name = "pocketjs-core"
+readme = "README.md"
+homepage = "https://pocketjs.pocket.nexus"
+documentation = "https://docs.rs/pocketjs-core"
+keywords = ["pocketjs", "ui", "layout"]
+categories = ["no-std", "gui"]
+edition = "2021"
+
+version.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Retained PocketJS UI tree, layout, animation and DrawList emission"
+
+[dependencies]
+pocket-spec = { workspace = true, default-features = true }
+pocket-drivers = { workspace = true, default-features = true }
+pocket-package = { workspace = true, default-features = true }
+pocket-media = { workspace = true, default-features = true }
+pocket-render = { workspace = true, default-features = true }
+# no_std + alloc flexbox layout. Feature set verified to resolve; f32-only,
+# no libm (see docs/DESIGN.md "Why these choices").
+taffy = { version = "0.11", default-features = false, features = [
+    "alloc",
+    "taffy_tree",
+    "flexbox",
+    "content_size",
+] }
+
+[dev-dependencies]
+pocket-raster = { workspace = true, default-features = true }
+
+[features]
+default = []
+# Layout work counters and the fresh-solver validation hook used by the
+# differential tests. Ordinary builds compile neither.
+counters = []

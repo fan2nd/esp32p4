@@ -28,6 +28,9 @@ pub struct Button {
     pub(crate) pressed: bool,
 }
 impl Button {
+    pub fn is_pressed(&self) -> bool {
+        self.pressed
+    }
     pub fn new(id: WidgetId, bounds: Rectangle, text: &'static str) -> Self {
         Self {
             base: Base::new(id, bounds),

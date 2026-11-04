@@ -99,6 +99,14 @@ impl<const N: usize> Scene<N> {
     pub fn damage(&self) -> Option<Rectangle> {
         self.damage
     }
+    /// Retained controls in paint order for an alternate rendering backend.
+    pub fn widgets(&self) -> impl Iterator<Item = &Widget> {
+        self.widgets[..self.len].iter().flatten()
+    }
+    /// Acknowledge damage only after an external renderer completed the region.
+    pub fn clear_damage(&mut self) {
+        self.damage = None;
+    }
     pub fn viewport(&self) -> Rectangle {
         self.viewport
     }

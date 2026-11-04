@@ -33,6 +33,19 @@ USB 仍强制全速，bulk 包 64 字节；当前逐扇区写入偏重并发稳�
 - 所有例程的 release 构建使用 `cargo build --release --locked --bins --features slint-ui`。
   卡热插拔、不同卡型、跨系统兼容及长时间大文件复制仍需实机验证。
 
+## 双槽是否冲突（2026-11-02）
+
+ESP32-P4 是一个 SDMMC Host 提供两个槽位，并非两个完全独立的传输控制器。
+本项目 slot 0 接 microSD，slot 1 接 C5；可以共存，但共享传输引擎，事务需要排队。
+本地 `3rd/esp-hal/src/sdmmc/mod.rs` 使用 `ENGINE` 异步互斥锁，取得锁后应用
+对应槽位的时钟与总线宽度。因此正常调用现有驱动不会因为同时请求而直接覆盖彼此寄存器。
+
+大量 SD 卡读写仍可能增加 Wi-Fi/BLE 传输延迟，慢卡写入或长事务尤其需要关注。
+这是共享资源竞争，不等于引脚冲突，也不保证两个槽位各自同时达到满速。
+把两个调用任务分到两个 CPU 核也不会增加 SDMMC 传输引擎数量。
+显示 DMA 与 SDMMC 是不同外设；它们仍可能在内存带宽、缓存维护或系统调度上互相影响，
+不能只凭卡顿就认定是双槽冲突。本次只核对官方文档和现有实现，没有新增并发压力测试。
+
 ## 官方参考
 
 - [Espressif P4 SDMMC Host](https://docs.espressif.com/projects/esp-idf/en/stable/esp32p4/api-reference/peripherals/sdmmc_host.html)：控制器、槽位与 DMA 约束。

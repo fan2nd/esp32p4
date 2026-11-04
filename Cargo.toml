@@ -69,6 +69,9 @@ sdio = "0.5.1"
 block-device-driver = "0.2.0"
 slint = { version = "=1.18.1", optional = true, default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
 linked_list_allocator = { version = "0.10.5", optional = true }
+microts = { path = "3rd/pocketjs/engine/microts-runtime", optional = true }
+pocket-raster = { path = "3rd/pocketjs/engine/raster", optional = true }
+pocket-drivers = { path = "3rd/pocketjs/engine/drivers", optional = true }
 
 [build-dependencies]
 slint-build = { version = "=1.18.1", optional = true }
@@ -96,6 +99,11 @@ name = "usb_audio"
 path = "src/bin/apps/usb_audio.rs"
 
 # Focused demos
+[[bin]]
+name = "desktop_pocket_ui"
+path = "src/bin/apps/desktop_pocket_ui.rs"
+required-features = ["pocket-ui"]
+
 [[bin]]
 name = "rust_ui_demo"
 path = "src/bin/demos/rust_ui_demo.rs"
@@ -143,6 +151,7 @@ path = "src/bin/verify/verify_hosted.rs"
 embassy-time = { version = "=0.5.1" }
 
 [features]
+pocket-ui = ["dep:microts", "dep:pocket-raster", "dep:pocket-drivers", "dep:linked_list_allocator"]
 slint-ui = ["dep:slint", "dep:slint-build", "dep:linked_list_allocator"]
 verify-radio = ["esp-hal/log-04"]
 verify-static = ["verify-radio"]
