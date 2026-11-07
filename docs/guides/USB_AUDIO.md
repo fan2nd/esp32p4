@@ -1,5 +1,31 @@
 # P4+C5 USB 麦克风 + 扬声器
 
+## 复合桌面高速版（2026-11-07）
+
+`desktop`、`desktop_tiny_ui`、`desktop_pocket_ui` 共用的运行时改用 HS + UAC2，
+独立 `usb_audio` 仍为下文的 FS + UAC1。仍使用 J2 的 HS PHY，采样格式保持
+16 kHz、PCM16、单声道。UAC2 描述符提供一个固定频率时钟源和读回的 CUR/RANGE、
+时钟有效状态；喇叭使用显式反馈。
+
+- 音频 `bInterval=1`，每 125 us 微帧 nominal 2 个采样，最多 3 个采样（6 字节）。
+- 反馈为 4 字节 16.16，单位为采样/微帧，标称 `2 << 16`。
+- HID `bInterval=4`，保持 1 ms 查询间隔；MSC bulk 包长为 512 字节。
+- IRQ 收包队列扩展至 64 包，即 HS 下 8 ms；桌面 OUT 缓冲 1024 字节，
+  独立 FS 音频缓冲 2304 字节，覆盖 ISO 队列和其他 OUT 端点。
+- 枚举日志读取 DSTS.ENUMSPD，`0=HS`，避免把配置值误认为实际连接速度。
+
+当前桌面描述符针对高速连接，不提供全速回退描述符；需直接连接支持 USB 2.0 HS 的主机/集线器。
+实机记录：Windows 枚举为 HS，VIA 只读通信通过；15 秒定向播放完成，补零、丢包、
+DMA 重启均为 0。麦克风 5 秒采集返回 80000 个样本，AC RMS 28.7、峰值 478、
+无削波；此检查不等同于语音回听。随后批量读写 1 MiB、8 MiB SD 文件期间持续播放，
+上述三个音频计数仍为 0。未验证 macOS 或全速回退。
+
+观察到用户调整配置后一次 Flash 保存耗时约 38 ms、补零 458 个样本；其余播放窗口
+正常。这是已有的 Flash 保存停顿，不能据本轮 HS/MSC 测试宣称任意负载都无卡顿。
+
+参考：[Microsoft UAC2 驱动要求](https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/usb-2-0-audio-drivers)、
+[TinyUSB 音频实现文档](https://docs.tinyusb.org/en/latest/reference/class/audio.html)。仅参考协议，未引入 C 实现。
+
 ## Windows 麦克风手动测试
 
 1. 保持当前 USB Audio 固件和两根 USB 线连接，先暂停电脑播放，避免扬声器声音

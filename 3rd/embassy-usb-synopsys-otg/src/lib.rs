@@ -294,7 +294,9 @@ impl PhyType {
 const EP_OUT_BUFFER_EMPTY: u16 = u16::MAX;
 // Isochronous OUT cannot retry missed frames. Rearm it from the ISR and queue
 // packets in SRAM, so application polling need not meet every 1 ms deadline.
-const ISO_OUT_SLOTS: usize = 8;
+// Keep 8 ms of packets at HS (125 us), so UI/SD work cannot starve audio RX.
+// Callers must reserve max_packet_size * ISO_OUT_SLOTS bytes for ISO OUT.
+const ISO_OUT_SLOTS: usize = 64;
 
 struct EpState {
     in_waker: AtomicWaker,

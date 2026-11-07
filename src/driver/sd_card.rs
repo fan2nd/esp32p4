@@ -27,7 +27,7 @@ impl SdCard {
             return self.blocks;
         }
         if self.blocks != 0 {
-            let _ = self.read(0, scratch).await;
+            let _ = self.read(0, core::slice::from_mut(scratch)).await;
         } else {
             // Bound retries so an empty slot cannot block the VIA LUN indefinitely.
             let result =
@@ -48,15 +48,13 @@ impl SdCard {
             Instant::now() + Duration::from_secs(if self.blocks == 0 { 2 } else { 1 });
         self.blocks
     }
-    pub async fn read(&mut self, lba: u32, block: &mut Aligned<A4, [u8; 512]>) -> bool {
+    pub async fn read(&mut self, lba: u32, blocks: &mut [Aligned<A4, [u8; 512]>]) -> bool {
         let ok = self.blocks != 0
+            && !blocks.is_empty()
             && lba < self.blocks
+            && blocks.len() <= (self.blocks - lba) as usize
             && matches!(
-                with_timeout(
-                    Duration::from_secs(2),
-                    self.card.read(lba, core::slice::from_mut(block))
-                )
-                .await,
+                with_timeout(Duration::from_secs(2), self.card.read(lba, blocks)).await,
                 Ok(Ok(()))
             );
         if !ok {
@@ -65,17 +63,15 @@ impl SdCard {
         self.probe_after = Instant::now() + Duration::from_secs(1);
         ok
     }
-    pub async fn write(&mut self, lba: u32, block: &Aligned<A4, [u8; 512]>) -> bool {
+    pub async fn write(&mut self, lba: u32, blocks: &[Aligned<A4, [u8; 512]>]) -> bool {
         // sdio waits for R1b/card-ready before returning: CSW success implies
         // programming completed; SYNCHRONIZE CACHE needs no deferred flush.
         let ok = self.blocks != 0
+            && !blocks.is_empty()
             && lba < self.blocks
+            && blocks.len() <= (self.blocks - lba) as usize
             && matches!(
-                with_timeout(
-                    Duration::from_secs(2),
-                    self.card.write(lba, core::slice::from_ref(block))
-                )
-                .await,
+                with_timeout(Duration::from_secs(2), self.card.write(lba, blocks)).await,
                 Ok(Ok(()))
             );
         if !ok {

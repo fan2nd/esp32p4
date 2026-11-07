@@ -16,6 +16,11 @@ use embassy_usb::{
 };
 use scsi::{Data, Scsi};
 
+// HS bulk endpoints carry a complete SD sector per USB transaction.
+const BULK_PACKET: usize = 512;
+// Bound each SD transaction to 8 KiB, releasing the shared engine between batches.
+const BATCH_SECTORS: usize = 16;
+
 pub struct Control<'a> {
     link: &'a Link,
     interface: u16,
@@ -88,8 +93,8 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
         let mut interface = function.interface();
         control.interface = u8::from(interface.interface_number()) as u16;
         let mut alt = interface.alt_setting(8, 6, 0x50, None);
-        let output = alt.endpoint_bulk_out(None, 64);
-        let input = alt.endpoint_bulk_in(None, 64);
+        let output = alt.endpoint_bulk_out(None, BULK_PACKET as u16);
+        let input = alt.endpoint_bulk_in(None, BULK_PACKET as u16);
         link.endpoints(input.info().addr, output.info().addr);
         drop(function);
         builder.handler(control);
@@ -121,9 +126,10 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
         }
     }
     async fn session(&mut self) -> Result<(), EndpointError> {
-        let mut packet = [0; 64];
+        let mut packet = [0; BULK_PACKET];
         let mut reply = [0; 64];
-        let mut sector: Aligned<A4, [u8; 512]> = Aligned([0; 512]);
+        let mut sectors: [Aligned<A4, [u8; 512]>; BATCH_SECTORS] =
+            core::array::from_fn(|_| Aligned([0; 512]));
         loop {
             self.link.ready().await;
             self.output.wait_enabled().await;
@@ -145,7 +151,7 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
             let lun = packet[13] as usize;
             let cdb = &packet[15..15 + packet[14] as usize];
             if lun == 1 && !matches!(cdb[0], 0x12 | 0x03 | 0xa0) {
-                let blocks = self.card.refresh(&mut sector).await;
+                let blocks = self.card.refresh(&mut sectors[0]).await;
                 self.scsi[1].set_media(blocks);
             }
             let command = if lun >= self.scsi.len() {
@@ -176,7 +182,7 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
                     let transfer = host.min(device);
                     match command.data {
                         Data::Reply(_) => {
-                            for chunk in reply[..transfer as usize].chunks(64) {
+                            for chunk in reply[..transfer as usize].chunks(BULK_PACKET) {
                                 self.input.write(chunk).await?;
                                 processed += chunk.len() as u32;
                                 yield_now().await;
@@ -186,9 +192,14 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
                             let mut remaining = transfer;
                             let mut block = lba;
                             while remaining != 0 {
+                                let count = remaining.min((BATCH_SECTORS * 512) as u32) as usize;
+                                let blocks = count.div_ceil(512);
                                 if lun == 0 {
-                                    disk::read(block, &mut sector);
-                                } else if !self.card.read(block, &mut sector).await {
+                                    for (offset, sector) in sectors[..blocks].iter_mut().enumerate()
+                                    {
+                                        disk::read(block + offset as u32, sector);
+                                    }
+                                } else if !self.card.read(block, &mut sectors[..blocks]).await {
                                     self.scsi[lun].io_failed(false);
                                     status = 1;
                                     // Stop the data phase at the failed sector; never fabricate data.
@@ -196,19 +207,21 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
                                     self.link.wait(|| self.link.halted.get() & IN == 0).await;
                                     break;
                                 }
-                                let count = remaining.min(512) as usize;
-                                for chunk in sector[..count].chunks(64) {
-                                    self.input.write(chunk).await?;
-                                    processed += chunk.len() as u32;
+                                let mut sent = 0;
+                                for sector in &sectors[..blocks] {
+                                    let bytes = (count - sent).min(512);
+                                    self.input.write(&sector[..bytes]).await?;
+                                    processed += bytes as u32;
+                                    sent += bytes;
                                     yield_now().await;
                                 }
                                 remaining -= count as u32;
-                                block += 1;
+                                block += blocks as u32;
                             }
                         }
                         _ => {}
                     }
-                    if status == 0 && host > device && device % 64 == 0 {
+                    if status == 0 && host > device && device % BULK_PACKET as u32 == 0 {
                         self.input.write(&[]).await?; // Short termination, case 5.
                     }
                     if host < device {
@@ -224,11 +237,11 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
                     status = 2;
                 }
                 while remaining != 0 {
-                    let count = remaining.min(512) as usize;
+                    let count = remaining.min((BATCH_SECTORS * 512) as u32) as usize;
                     let mut filled = 0;
                     while filled < count {
                         let n = self.output.read(&mut packet).await?;
-                        let expected = (count - filled).min(64);
+                        let expected = (count - filled).min(BULK_PACKET);
                         if n != expected {
                             self.link.locked.set(true);
                             self.link.halt(OUT).await;
@@ -240,12 +253,12 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
                             self.input.write(&csw).await?;
                             pending::<()>().await; // Recover only via BOT reset.
                         }
-                        sector[filled..filled + n].copy_from_slice(&packet[..n]);
+                        sectors[filled / 512][..n].copy_from_slice(&packet[..n]);
                         filled += n;
                     }
                     if !failed {
-                        if self.card.write(block, &sector).await {
-                            processed += 512;
+                        if self.card.write(block, &sectors[..count / 512]).await {
+                            processed += count as u32;
                         } else {
                             self.scsi[lun].io_failed(true);
                             status = 1;
@@ -255,7 +268,7 @@ impl<'a, D: Driver<'a>> Msc<'a, D> {
                     // After an I/O error drain the rest of host data, keeping the
                     // residue for sectors not committed to the card.
                     remaining -= count as u32;
-                    block += 1;
+                    block += count.div_ceil(512) as u32;
                     yield_now().await;
                 }
                 if host > device {

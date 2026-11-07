@@ -1,4 +1,4 @@
-//! UAC1 duplex, mono PCM16 at 16 kHz. One AC and two AS interfaces.
+//! UAC1/FS or UAC2/HS duplex, mono PCM16 at 16 kHz. One AC and two AS interfaces.
 //! No hardware volume controls are advertised; adjust gain in the host mixer.
 use core::cell::{Cell, RefCell};
 use embassy_usb::{
@@ -47,6 +47,7 @@ pub struct Control<'a> {
     mic_interface: u8,
     speaker_ep: u8,
     mic_ep: u8,
+    high_speed: bool,
 }
 impl<'a> Control<'a> {
     pub fn new(state: &'a AudioState) -> Self {
@@ -56,6 +57,7 @@ impl<'a> Control<'a> {
             mic_interface: 0,
             speaker_ep: 0,
             mic_ep: 0,
+            high_speed: false,
         }
     }
     fn owns(&self, r: &Request) -> bool {
@@ -110,6 +112,34 @@ impl Handler for Control<'_> {
         )
     }
     fn control_in<'a>(&'a mut self, r: Request, buf: &'a mut [u8]) -> Option<InResponse<'a>> {
+        if self.high_speed {
+            // UAC2 uses an interface/entity clock control, not endpoint sample-rate requests.
+            if r.request_type != RequestType::Class
+                || r.recipient != Recipient::Interface
+                || r.index != (5 << 8 | u16::from(self.speaker_interface - 1))
+            {
+                return None;
+            }
+            let len = match (r.request, r.value) {
+                (1, 0x100) => {
+                    buf[..4].copy_from_slice(&RATE.to_le_bytes());
+                    4
+                }
+                (2, 0x100) => {
+                    buf[..2].copy_from_slice(&1u16.to_le_bytes());
+                    buf[2..6].copy_from_slice(&RATE.to_le_bytes());
+                    buf[6..10].copy_from_slice(&RATE.to_le_bytes());
+                    buf[10..14].fill(0); // One fixed rate; no programmable step.
+                    14
+                }
+                (1, 0x200) => {
+                    buf[0] = 1; // Codec clock is valid.
+                    1
+                }
+                _ => return Some(InResponse::Rejected),
+            };
+            return Some(InResponse::Accepted(&buf[..len]));
+        }
         if !self.owns(&r) {
             return None;
         }
@@ -131,55 +161,103 @@ pub struct Streams<'d, D: Driver<'d>> {
 pub fn build<'d, D: Driver<'d>>(
     builder: &mut Builder<'d, D>,
     control: &'d mut Control<'d>,
+    high_speed: bool,
 ) -> Streams<'d, D> {
-    let mut function = builder.function(1, 1, 0);
+    control.high_speed = high_speed;
+    let protocol = if high_speed { 0x20 } else { 0 };
+    let packet_size = if high_speed { 6 } else { MAX_PACKET as u16 };
+    let mut function = builder.function(1, 1, protocol);
     let mut ac = function.interface();
     let ac_number = u8::from(ac.interface_number());
     control.speaker_interface = ac_number + 1;
     control.mic_interface = ac_number + 2;
-    let mut alt = ac.alt_setting(1, 1, 0, None);
-    // Header (10) + two input terminals (12 each) + two output terminals (9 each).
-    alt.descriptor(0x24, &[1, 0, 1, 52, 0, 2, ac_number + 1, ac_number + 2]);
-    alt.descriptor(0x24, &[2, 1, 1, 1, 0, 1, 0, 0, 0, 0]); // USB -> speaker
-    alt.descriptor(0x24, &[3, 2, 1, 3, 0, 1, 0]);
-    alt.descriptor(0x24, &[2, 3, 1, 2, 0, 1, 0, 0, 0, 0]); // microphone -> USB
-    alt.descriptor(0x24, &[3, 4, 1, 1, 0, 3, 0]);
+    let mut alt = ac.alt_setting(1, 1, protocol, None);
+    if high_speed {
+        // UAC2: 75-byte AC topology, shared fixed 16 kHz clock source (entity 5).
+        alt.descriptor(0x24, &[1, 0, 2, 8, 75, 0, 0]);
+        alt.descriptor(0x24, &[0x0a, 5, 1, 5, 0, 0]);
+        alt.descriptor(0x24, &[2, 1, 1, 1, 0, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        alt.descriptor(0x24, &[3, 2, 1, 3, 0, 1, 5, 0, 0, 0]);
+        alt.descriptor(0x24, &[2, 3, 1, 2, 0, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
+        alt.descriptor(0x24, &[3, 4, 1, 1, 0, 3, 5, 0, 0, 0]);
+    } else {
+        // Header (10) + two input terminals (12 each) + two output terminals (9 each).
+        alt.descriptor(0x24, &[1, 0, 1, 52, 0, 2, ac_number + 1, ac_number + 2]);
+        alt.descriptor(0x24, &[2, 1, 1, 1, 0, 1, 0, 0, 0, 0]); // USB -> speaker
+        alt.descriptor(0x24, &[3, 2, 1, 3, 0, 1, 0]);
+        alt.descriptor(0x24, &[2, 3, 1, 2, 0, 1, 0, 0, 0, 0]); // microphone -> USB
+        alt.descriptor(0x24, &[3, 4, 1, 1, 0, 3, 0]);
+    }
 
     let mut spk = function.interface();
-    spk.alt_setting(1, 2, 0, None);
-    let mut alt = spk.alt_setting(1, 2, 0, None);
-    alt.descriptor(0x24, &[1, 1, 0, 1, 0]);
-    alt.descriptor(0x24, &[2, 1, 1, 2, 16, 1, 0x80, 0x3e, 0]);
-    let speaker = alt.alloc_endpoint_out(EndpointType::Isochronous, None, MAX_PACKET as u16, 1);
-    // UAC1 feedback is three-byte 10.14; do not advertise UAC2's four-byte format.
-    let feedback = alt.alloc_endpoint_in(EndpointType::Isochronous, None, 3, 1);
+    spk.alt_setting(1, 2, protocol, None);
+    let mut alt = spk.alt_setting(1, 2, protocol, None);
+    if high_speed {
+        alt.descriptor(0x24, &[1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0]);
+        alt.descriptor(0x24, &[2, 1, 2, 16]);
+    } else {
+        alt.descriptor(0x24, &[1, 1, 0, 1, 0]);
+        alt.descriptor(0x24, &[2, 1, 1, 2, 16, 1, 0x80, 0x3e, 0]);
+    }
+    // bInterval=1: one FS frame or HS microframe, with one extra sample for drift.
+    let speaker = alt.alloc_endpoint_out(EndpointType::Isochronous, None, packet_size, 1);
+    let feedback = alt.alloc_endpoint_in(
+        EndpointType::Isochronous,
+        None,
+        if high_speed { 4 } else { 3 },
+        1,
+    );
+    let sync_address = [0, feedback.info().addr.into()];
     alt.endpoint_descriptor(
         speaker.info(),
         SynchronizationType::Asynchronous,
         UsageType::DataEndpoint,
-        &[0, feedback.info().addr.into()],
+        if high_speed {
+            &[]
+        } else {
+            &sync_address
+        },
     );
-    alt.descriptor(0x25, &[1, 1, 0, 0, 0]);
+    alt.descriptor(
+        0x25,
+        if high_speed {
+            &[1, 0, 0, 0, 0, 0]
+        } else {
+            &[1, 1, 0, 0, 0]
+        },
+    );
     alt.endpoint_descriptor(
         feedback.info(),
         SynchronizationType::NoSynchronization,
         UsageType::FeedbackEndpoint,
-        &[1, 0],
+        if high_speed { &[] } else { &[1, 0] },
     );
 
     let mut mic_if = function.interface();
-    mic_if.alt_setting(1, 2, 0, None);
-    let mut alt = mic_if.alt_setting(1, 2, 0, None);
-    alt.descriptor(0x24, &[1, 4, 0, 1, 0]);
-    alt.descriptor(0x24, &[2, 1, 1, 2, 16, 1, 0x80, 0x3e, 0]);
-    let mic = alt.alloc_endpoint_in(EndpointType::Isochronous, None, MAX_PACKET as u16, 1);
+    mic_if.alt_setting(1, 2, protocol, None);
+    let mut alt = mic_if.alt_setting(1, 2, protocol, None);
+    if high_speed {
+        alt.descriptor(0x24, &[1, 4, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0]);
+        alt.descriptor(0x24, &[2, 1, 2, 16]);
+    } else {
+        alt.descriptor(0x24, &[1, 4, 0, 1, 0]);
+        alt.descriptor(0x24, &[2, 1, 1, 2, 16, 1, 0x80, 0x3e, 0]);
+    }
+    let mic = alt.alloc_endpoint_in(EndpointType::Isochronous, None, packet_size, 1);
     alt.endpoint_descriptor(
         mic.info(),
         SynchronizationType::Asynchronous,
         UsageType::DataEndpoint,
-        &[0, 0],
+        if high_speed { &[] } else { &[0, 0] },
     );
-    alt.descriptor(0x25, &[1, 1, 0, 0, 0]);
+    alt.descriptor(
+        0x25,
+        if high_speed {
+            &[1, 0, 0, 0, 0, 0]
+        } else {
+            &[1, 1, 0, 0, 0]
+        },
+    );
     control.speaker_ep = speaker.info().addr.into();
     control.mic_ep = mic.info().addr.into();
     drop(function);

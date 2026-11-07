@@ -277,11 +277,10 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         .unwrap();
     let state = AudioState::default();
     let mut control = Control::new(&state);
-    let mut ep_buffer = [0; 512];
+    let mut ep_buffer = [0; 1024];
     let mut usb_config = DriverConfig::default();
-    // UAC1 uses 1 ms full-speed frames; HS playback is not validated on Windows.
-    // The same J2 HS controller/PHY remains in use, limited to 12 Mbit/s.
-    usb_config.force_full_speed = true;
+    // UAC2 uses 125 us microframes; MSC shares the 480 Mbit/s HS bus.
+    usb_config.force_full_speed = false;
     let driver = Driver::new(Usb::new_hs(p.USB_HS), &mut ep_buffer, usb_config);
     let msc_link = waveshare_p4_eth::driver::usb_msc::bridge::Link::new();
     let mut msc_control = waveshare_p4_eth::driver::usb_msc::Control::new(&msc_link);
@@ -290,6 +289,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     config.manufacturer = Some("P4 Lab");
     config.product = Some("P4 Desktop Keyboard + Audio + VIA Drive");
     config.serial_number = Some("P4-DESKTOP-001");
+    config.device_release = 0x0200; // UAC2 + HS endpoint descriptors.
     config.self_powered = true;
     config.max_power = 0;
     let mut descriptors = [0; 1024];
@@ -320,14 +320,14 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         mut speaker,
         mut mic,
         mut feedback,
-    } = usb_audio::build(&mut builder, &mut control);
+    } = usb_audio::build(&mut builder, &mut control, true);
     let mut keyboard = HidWriter::<_, 8>::new(
         &mut builder,
         &mut keyboard_state,
         HidConfig {
             report_descriptor: KEYBOARD_DESC,
             request_handler: None,
-            poll_ms: 1,
+            poll_ms: 4,
             max_packet_size: 8,
         },
     );
@@ -337,7 +337,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         HidConfig {
             report_descriptor: CONSUMER_DESC,
             request_handler: None,
-            poll_ms: 1,
+            poll_ms: 4,
             max_packet_size: 2,
         },
     );
@@ -347,7 +347,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         HidConfig {
             report_descriptor: RAW_DESC,
             request_handler: None,
-            poll_ms: 1,
+            poll_ms: 4,
             max_packet_size: 32,
         },
     )
@@ -364,7 +364,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         HidConfig {
             report_descriptor: waveshare_p4_eth::desktop::touchpad::DESCRIPTOR,
             request_handler: None,
-            poll_ms: 1,
+            poll_ms: 4,
             max_packet_size: 6,
         },
     );
@@ -379,7 +379,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     let feedback_sum = Cell::new(0i64);
     let feedback_count = Cell::new(0u32);
     waveshare_p4_eth::diagnostic!(
-        "usb_audio: UAC1 mono PCM16 16000 Hz; USB-A HS controller, full-speed UAC1"
+        "usb_audio: UAC2 mono PCM16 16000 Hz; USB-A high-speed, MSC 512-byte packets"
     );
 
     let hid = async {
@@ -583,7 +583,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         let mut packet = [0; MAX_PACKET];
         loop {
             mic.wait_enabled().await;
-            let nominal = 16; // One full-speed packet per millisecond.
+            let nominal = 2; // 16 kHz / 8000 HS microframes per second.
             let mut primed = false;
             loop {
                 let n = {
@@ -627,8 +627,9 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
                 let correction = (error * 8).clamp(-1310, 1310);
                 feedback_sum.set(feedback_sum.get() + correction as i64);
                 feedback_count.set(feedback_count.get() + 1);
-                let value = (16 * 16384 + correction) as u32; // UAC1 10.14 samples/frame.
-                if feedback.write(&value.to_le_bytes()[..3]).await.is_err() {
+                // Convert the existing servo to UAC2 16.16 samples/microframe.
+                let value = ((16 * 16384 + correction) / 2) as u32;
+                if feedback.write(&value.to_le_bytes()).await.is_err() {
                     break;
                 }
             }
@@ -785,6 +786,18 @@ impl embassy_usb::Handler for UsbStatus {
     }
     fn configured(&mut self, on: bool) {
         self.configured = on;
+        if on {
+            // DWC DSTS.ENUMSPD is read-only; 0 means HS, 1/3 means FS.
+            // Read the negotiated link speed, not merely the requested PHY mode.
+            let speed = unsafe {
+                esp_hal::peripherals::USB_HS::PTR
+                    .cast::<u8>()
+                    .add(0x808)
+                    .cast::<u32>()
+                    .read_volatile()
+            } >> 1 & 3;
+            log::info!("desktop: USB negotiated speed={} (0=HS)", speed);
+        }
         desktop::with(|s| {
             s.view.usb = on;
             s.view.revision += 1;

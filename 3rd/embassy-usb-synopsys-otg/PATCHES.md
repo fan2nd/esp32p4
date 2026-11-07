@@ -25,6 +25,9 @@ Licensed under MIT OR Apache-2.0; license texts are included.
    EPDISD or EPENA clearing with a bounded handshake before flushing its FIFO.
    Endpoint disable/enable alone preserves PID and halt, allowing the desktop's
    MSC BOT reset to preserve both until the host sends CLEAR_FEATURE.
+7. ISO OUT's interrupt-fed packet ring has 64 slots, retaining 8 ms at HS
+   microframe cadence. Callers reserve 64 times the endpoint packet size;
+   the standalone FS audio example reserves a larger buffer accordingly.
 
 No C code is built or linked. The receive FIFO accounting was cross-checked
 against the explanation in the upstream TinyUSB DWC2 driver (reference only):
@@ -32,7 +35,8 @@ https://github.com/hathach/tinyusb/blob/master/src/portable/synopsys/dwc2/dcd_dw
 
 The local allocation unit-test module has been removed under the project policy;
 production FIFO allocation and USB fixes remain unchanged. Current board
-configuration uses full-speed UAC1 on the HS PHY. High-speed audio, microphone
-capture and other controller families are not validated by this patch.
+desktop configuration uses high-speed UAC2; standalone audio retains FS UAC1.
+See `docs/guides/USB_AUDIO.md` for dated board verification; other controller
+families are not validated by this patch.
 Dependency refresh does not add hardware validation. Use firmware builds and
 explicit board verification rather than adding local unit tests.

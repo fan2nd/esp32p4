@@ -62,7 +62,7 @@ fn main() -> ! {
     let state = AudioState::default();
     let mut control = Control::new(&state);
     // Includes the ISR's eight-packet isochronous OUT queue and EP0 buffer.
-    let mut ep_buffer = [0; 512];
+    let mut ep_buffer = [0; 2304]; // 64 ISO OUT slots plus EP0 storage.
     let mut usb_config = DriverConfig::default();
     // UAC1 uses 1 ms full-speed frames; HS playback is not validated on Windows.
     // The same J2 HS controller/PHY remains in use, limited to 12 Mbit/s.
@@ -91,7 +91,7 @@ fn main() -> ! {
         mut speaker,
         mut mic,
         mut feedback,
-    } = usb_audio::build(&mut builder, &mut control);
+    } = usb_audio::build(&mut builder, &mut control, false);
     let mut usb = builder.build();
     // All futures run cooperatively on this one thread. RefCell borrows never
     // cross an await; the USB ISR only touches the HAL endpoint state.

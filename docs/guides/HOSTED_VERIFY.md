@@ -35,6 +35,17 @@ cargo build --release --bin verify_hosted --locked
 扫描结果受容器容量限制。2026-11-07 的中断修复已通过 P4 release 构建及默认功能下的全部 bin 静态检查，
 当前未连接板卡，尚未完成该修复的上板验证。
 
+### 2026-11-07 Windows 工作区验证
+
+- 已快进拉取至 `a60b45a`（SDIO 中断等待修复及移除 Hosted 轮询）。
+- `cargo build --release --locked --bins --features 'slint-ui,pocket-ui'` 通过，覆盖全部 15 个程序。
+- `cargo clippy --release --locked --bin verify_hosted` 通过，但产生 26 项现有代码警告，不能视为无警告检查。
+- 初次打开 COM6 两次失败，Windows 报“连到系统上的设备没有发挥作用”；重新插拔 Type-C 后恢复，使用 921600 波特率完成烧录。
+- `verify_hosted` 实机通过初始化、3 次版本 RPC（3.0.10）、3 次扫描（每次达到 16 条容量）及 45 秒心跳观察，输出 `PASS`。
+- 随后恢复最新 `desktop_pocket_ui`：USB configured、VIA 只读协议检查、SD 卡初始化、保存的 Wi-Fi 自动连接、DHCP 及天气刷新均正常。
+- 对主页、CSS、两份 JavaScript、图片状态和天气接口发起六路并行请求，全部返回 HTTP 200。
+- 日志捕获短暂音频播放，`empty/drop/restart` 均为 0；不代表持续播放压力验证。用户随后确认功能正常，并反馈读卡器速度慢；本轮未单独验证 BLE 功能及 SD 卡读写吞吐。
+
 ## 烧录顺序
 
 先烧 C5，再烧 P4。串口名以实际连接为准，macOS 可用 `ls /dev/cu.*` 查看。
