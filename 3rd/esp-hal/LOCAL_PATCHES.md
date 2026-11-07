@@ -75,3 +75,26 @@ https://github.com/espressif/esp-idf/blob/master/components/esp_hal_dma/esp32p4/
 Firmware remains Rust. All release binaries built. A 160,572-byte upload produced six invalid-LLI
 recoveries; the user confirmed that the whale and status UI were displayed again.
 This verifies recovery in that workload, not absence of transient underflow or audio gaps.
+
+## SDIO card interrupts (2026-11-07)
+
+`src/sdmmc/mod.rs` configures the unused active-low `CARD_INT` input high,
+card-detect low (present) and write-protect low by default. Explicit CD/WP
+builders can still replace those defaults. `CARD_INT` is separate from DAT1;
+it must not be left at the GPIO matrix reset value for in-band SDIO interrupts.
+
+The data-pin builders remember DAT1's GPIO for both GPIO-matrix and IO_MUX
+slots. The interrupt future registers its waker and unmasks the interrupt before
+consuming the ISR latch and sampling DAT1. An already-low DAT1 completes the
+wait immediately; otherwise the task sleeps until an interrupt wakes it. This
+covers an interrupt asserted before the wait or while a previous wait was
+cancelled, without a timer, repeated register reads or self-waking loop.
+The ISR and cancellation latch semantics are unchanged.
+
+References: ESP-IDF v5.5
+[slot signal defaults](https://github.com/espressif/esp-idf/blob/v5.5/components/esp_driver_sdmmc/src/sdmmc_host.c#L791)
+and [SDIO interrupt wait](https://github.com/espressif/esp-idf/blob/v5.5/components/esp_driver_sdmmc/src/sdmmc_host.c#L1153).
+The Hosted adapter's 10 ms polling fallback is removed. The P4 `verify_hosted`
+release build and default-feature `cargo check --release --locked --bins` passed.
+Fresh hardware verification is pending a connected board; other chips have only
+been reviewed at source level.

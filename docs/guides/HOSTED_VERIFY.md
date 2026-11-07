@@ -17,7 +17,10 @@ D0..D3=14..17，GPIO54 控制 C5 EN。
 - `src/driver/hosted_v3.rs` 用 Rust 回复 v3 PRIVATE INIT 能力握手；
   检查帧校验和、C5 ID、RPC v2、Packet 模式及双向 1536 字节缓冲。
   RPC 与 SDIO 数据传输由 Embassy 库处理。
-- 等待接收事件时保留 10 ms 定时状态检查，避免仅依赖中断导致握手停滞。
+- 接收事件直接等待 SDIO 中断，不使用 10 ms 定时检查。HAL 配置未使用的
+  `CARD_INT` 为高电平，并在注册 waker、开启中断后检查 DAT1：已经拉低时立即
+  处理待收数据，否则等待硬件中断。取消等待后再次等待也会检查已有事件和电平。
+  详见 `3rd/esp-hal/LOCAL_PATCHES.md`。
 
 ## 构建与检查
 
@@ -28,7 +31,9 @@ cargo build --release --bin verify_hosted --locked
 已有项目自有测试与主机测试包已移除。此前 release 构建及普通 Clippy 检查通过，现有音频、显示、
 触摸模块有 4 项警告，因此严格 `-D warnings` 检查不通过。
 
-板上独立验证已通过初始化、版本查询、连续扫描及心跳观察；扫描结果受容器容量限制。
+此前带 10 ms 轮询的版本已通过板上初始化、版本查询、连续扫描及心跳观察；
+扫描结果受容器容量限制。2026-11-07 的中断修复已通过 P4 release 构建及默认功能下的全部 bin 静态检查，
+当前未连接板卡，尚未完成该修复的上板验证。
 
 ## 烧录顺序
 
@@ -43,13 +48,13 @@ C5：按住 C5 BOOT，复位或重新上电后松开，让它进入下载模式�
 espflash write-bin --chip esp32c5 --port "$C5_PORT" --before no-reset --after no-reset --no-stub --non-interactive --skip-update-check 0x0 target/firmware/c5-hosted-v3-packet/esp-hosted-v3.0.10-packet-fix-esp32c5-sdio-wifi-ble-merged.bin
 ```
 
-P4：产物位于 `target/firmware/p4-hosted-standalone/`，`verify_hosted.elf` 可直接由
+P4：当前中断修复产物位于 `target/firmware/p4-hosted-irq/`，`verify_hosted.elf` 可直接由
 `espflash flash --chip esp32p4 --port "$P4_PORT" --monitor verify_hosted.elf` 烧录。
 `verify_hosted-merged.bin` 是 16 MB flash / DIO 80 MHz / 最低 rev 3.1 的合并镜像，
 若使用 `write-bin` 则写到 `0x0`。若烧录后未启动，松开 BOOT 并按实体 RESET。
 
 ```sh
-espflash flash --chip esp32p4 --port "$P4_PORT" --flash-size 16mb --flash-mode dio --flash-freq 80mhz --min-chip-rev 3.1 --monitor --skip-update-check target/firmware/p4-hosted-standalone/verify_hosted.elf
+espflash flash --chip esp32p4 --port "$P4_PORT" --flash-size 16mb --flash-mode dio --flash-freq 80mhz --min-chip-rev 3.1 --monitor --skip-update-check target/firmware/p4-hosted-irq/verify_hosted.elf
 ```
 
 ## 预期结果

@@ -40,7 +40,7 @@ use core::{
 use embassy_futures::yield_now;
 use embassy_sync::{mutex::MutexGuard, waitqueue::WakerRegistration};
 use esp_sync::{NonReentrantMutex, RawMutex};
-use portable_atomic::AtomicBool;
+use portable_atomic::{AtomicBool, AtomicU8};
 use procmacros::{BuilderLite, handler};
 use sdio::{self as _, MmcError};
 
@@ -57,6 +57,7 @@ use crate::{
     },
     gpio::{
         InputSignal,
+        Level,
         OutputConfig,
         interconnect::{self, PeripheralInput, PeripheralOutput},
     },
@@ -1018,6 +1019,9 @@ struct SlotState {
     /// Edge latch: set by the ISR when a card interrupt fires, consumed
     /// (swapped to `false`) by the waiter. Decouples the edge from the await.
     io_pending: AtomicBool,
+    /// DAT1 GPIO for checking an already asserted, active-low SDIO interrupt.
+    /// Set by the pin builder for both matrix and IO_MUX slots.
+    data1_pin: AtomicU8,
     #[cfg(sdmmc_has_gpio_matrix)]
     pins: UnsafeCell<SlotPins>,
 }
@@ -1033,6 +1037,7 @@ impl SlotState {
             io_waker: AtomicWaker::new(),
             cd_waker: AtomicWaker::new(),
             io_pending: AtomicBool::new(false),
+            data1_pin: AtomicU8::new(u8::MAX),
             #[cfg(sdmmc_has_gpio_matrix)]
             pins: UnsafeCell::new(SlotPins::new()),
         }
@@ -1076,6 +1081,7 @@ struct SlotInfo {
     data_out: &'static [OutputSignal],
     cd_in: Option<InputSignal>,
     wp_in: Option<InputSignal>,
+    card_int_in: Option<InputSignal>,
 }
 
 // Wrap an optional metadata signal name in `Some(..)`, or yield `None` when
@@ -1127,6 +1133,7 @@ for_each_sdmmc! {
 
                 cd_in: opt_in!($($cd)?),
                 wp_in: opt_in!($($wp)?),
+                card_int_in: opt_in!($($card_int)?),
             }
         ),* ];
 
@@ -1359,6 +1366,20 @@ impl<'d> SdHostController<'d> {
         if self.taken[idx].swap(true, Ordering::Relaxed) {
             return Err(ConfigError::SlotInUse);
         }
+        // SDIO interrupts arrive in-band on DAT1. Disable the separate,
+        // unused active-low card interrupt input. Leaving it at the matrix
+        // reset value can hold the controller's interrupt detector low.
+        // Match esp-idf sdmmc_host_init_slot's defaults for unwired CD/WP.
+        let info = slot_info(slot_id(S));
+        if let Some(signal) = info.card_int_in {
+            signal.connect_to(&Level::High);
+        }
+        if let Some(signal) = info.cd_in {
+            signal.connect_to(&Level::Low);
+        }
+        if let Some(signal) = info.wp_in {
+            signal.connect_to(&Level::Low);
+        }
         #[cfg(sdmmc_delay_phase_num_is_set)]
         SETTINGS.with(|s| {
             s.slots[idx].input_delay_phase = config.input_delay_phase;
@@ -1438,8 +1459,14 @@ for_each_sdmmc! {
             SlotData<'d, $idx, L> for P
         {
             fn configure(self) {
+                let pin: interconnect::OutputSignal<'d> = self.into();
+                if L == 1 {
+                    SLOT_STATE[$idx].data1_pin.store(
+                        pin.gpio_number().unwrap_or(u8::MAX), Ordering::Release,
+                    );
+                }
                 slot_pins(slot_id($idx)).data[L as usize] = connect_bidir(
-                    self.into(),
+                    pin,
                     slot_info(slot_id($idx)).data_in[L as usize],
                     slot_info(slot_id($idx)).data_out[L as usize],
                 );
@@ -1496,6 +1523,11 @@ macro_rules! impl_signal_trait {
     ($gpio:ident, $trait:ident, $af:ident, $s:literal, $l:literal) => {
         impl<'d> $trait<'d, $s, $l> for crate::peripherals::$gpio<'d> {
             fn configure(self) {
+                if $l == 1 {
+                    SLOT_STATE[$s]
+                        .data1_pin
+                        .store(crate::gpio::Pin::number(&self), Ordering::Release);
+                }
                 configure_iomux_pad(
                     crate::gpio::Pin::number(&self),
                     crate::gpio::AlternateFunction::$af,
@@ -1809,6 +1841,10 @@ impl<'d, const S: u8> Slot<'d, S, Async> {
     }
 
     /// Waits for the SDIO card interrupt (card pulls DAT1 low).
+    ///
+    /// Returns immediately if DAT1 is already asserted. The controller only
+    /// detects falling edges, so a packet arriving before this wait (or while
+    /// a previous wait was cancelled) must also be detected by its level.
     #[must_use = "futures do nothing unless you `.await` or poll them"]
     pub fn wait_for_sdio_interrupt(&mut self) -> impl Future<Output = ()> {
         let slot_id = slot_id(S);
@@ -2400,10 +2436,23 @@ impl Future for WaitForInterruptFuture {
             .io_pending
             .swap(false, Ordering::AcqRel)
         {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
+            return Poll::Ready(());
         }
+
+        // Arm and register first, then sample DAT1 once. An edge after this
+        // sample will wake us; an earlier edge is covered by the latch or the
+        // asserted level. No timer, self-wake or periodic status read is needed.
+        let pin_number = SLOT_STATE[self.slot].data1_pin.load(Ordering::Acquire);
+        if pin_number != u8::MAX {
+            // SAFETY: the slot's configured DAT1 owns this pin. This temporary
+            // handle only reads the input register and never changes routing,
+            // direction or ownership. The future borrows the slot exclusively.
+            let pin = unsafe { crate::gpio::AnyPin::steal(pin_number) };
+            if !pin.is_input_high() {
+                return Poll::Ready(());
+            }
+        }
+        Poll::Pending
     }
 }
 

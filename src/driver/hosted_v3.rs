@@ -34,13 +34,7 @@ impl<I: Interface> Interface for HostedV3<I> {
     }
 
     async fn wait_for_ready(&mut self) {
-        // Check the pending status even when DAT1 was already asserted before
-        // the host armed its interrupt (notably for the first INIT packet).
-        embassy_futures::select::select(
-            self.inner.wait_for_ready(),
-            embassy_time::Timer::after_millis(10),
-        )
-        .await;
+        self.inner.wait_for_ready().await;
     }
 
     async fn transfer(&mut self, buffer: &mut Aligned<A4, [u8]>, tx_len: usize) {
