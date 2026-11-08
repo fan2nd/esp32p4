@@ -109,7 +109,7 @@ DMA 未重启。保存可以在播放时完成，但页回收尚不能保证无�
 
 ## 代码边界
 
-- `3rd/tiny-ui`：可复用 no_std、无 alloc 组件框架，不依赖板级 HAL 或桌面业务。
+- Git 依赖 `fan2nd/tinyui`：可复用 no_std、无 alloc 组件框架，不依赖板级 HAL 或桌面业务。
 - `src/desktop/page.rs`：桌面页面组合、界面状态、输入与业务动作。
 - `src/desktop/display.rs`：Core 1 屏幕/触摸适配和共享业务状态桥接。
 - `src/desktop/controls.rs`：两种 UI 共用的无分配宏键盘控制器，保持多键和宏定时语义。

@@ -4,7 +4,7 @@
 
 | 层次 | 路径 | 职责 |
 | --- | --- | --- |
-| 可复用框架 | [`3rd/tiny-ui`](../../3rd/tiny-ui/README.md) | `Scene<N>`、组件、输入捕获/焦点、脏区绘制，无页面 ID/板级依赖 |
+| 可复用框架 | [`tiny-ui`](https://github.com/fan2nd/tinyui) | `Scene<N>`、组件、输入捕获/焦点、脏区绘制，无页面 ID/板级依赖 |
 | 页面模块 | `src/bin/demos/rust_ui_page.rs` | 组合组件、业务状态、标签更新与复位策略 |
 | 固件适配 | `src/bin/demos/rust_ui_demo.rs` | GT911 输入、屏幕映射、PSRAM/DMA 双缓冲 |
 

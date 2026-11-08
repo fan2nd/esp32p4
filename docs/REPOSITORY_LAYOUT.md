@@ -38,7 +38,7 @@
 
 - `assets/`（含 `assets/ui/`）仍供原有固件使用，未删除字体、图像或授权文件。
 - `3rd/esp-hal/`、`3rd/embassy-usb-synopsys-otg/`、`3rd/embassy-net-esp-hosted/` 包含实际依赖的本地补丁，不是可以随意清理的下载缓存。
-- `3rd/tiny-ui/` 提供独立 UI 框架；根 bin `src/bin/demos/rust_ui_demo.rs` 直接依赖框架，页面模块在 `src/bin/demos/rust_ui_page.rs`，不另设演示 crate。
+- Git 依赖 `fan2nd/tinyui` 提供独立 UI 框架；根 bin `src/bin/demos/rust_ui_demo.rs` 直接依赖框架，页面模块在 `src/bin/demos/rust_ui_page.rs`，不另设演示 crate。
 - 项目自有测试、`tests/` 与独立主机测试包已移除；实机辅助脚本放到 `tools/`，`src/bin/verify/` 保留板上验证固件。
 - `target/` 是忽略的本地构建产物，没有加入版本控制。
 
@@ -51,7 +51,7 @@
 - tiny-ui 格式检查、主机严格 Clippy 与 RISC-V no_std 编译检查通过。
 - 仓库内非第三方依赖 Markdown 相对链接检查通过。
 
-根 `rust_ui_demo` bin 直接组织演示，依赖 `3rd/tiny-ui`，
+根 `rust_ui_demo` bin 直接组织演示，依赖 Git 依赖 `fan2nd/tinyui`，
 组合页面位于 `src/bin/demos/rust_ui_page.rs`。没有独立 HTTP/浏览器预览包。
 现有截图仅作渲染参考。
 
@@ -106,3 +106,10 @@ PocketJS 直接引用生成的 `gen/desktop.rs`；生成工具移除仅转导出
 
 保留带真实职责的包装：Hosted 协议兼容、SDIO 日志诊断、USB 接口适配、跨核同步以及
 trait 必需实现。第三方源码布局不作本地重排。本轮仅整理组织边界，未新增测试或重新烧录。
+
+
+2026-11-08：tiny-ui 已移至独立仓库 https://github.com/fan2nd/tinyui，当前固定提交
+`8a628f031ee692bcfdab5a548e07cde2be760982`，由 Cargo.lock 锁定来源，不再保留本地框架副本。
+桌面业务页面、字体资源和硬件适配仍在本仓库。升级时显式修改 rev 并重新编译验证。
+验证：`desktop_tiny_ui` 独立 release 构建，以及启用 `pocket-ui,slint-ui` 的全部 bin
+`--locked` release 构建均通过。此次仅切换相同框架源码的来源，未重新烧录板子。

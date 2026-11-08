@@ -5406,6 +5406,7 @@ dependencies = [
 [[package]]
 name = "tiny-ui"
 version = "0.1.0"
+source = "git+https://github.com/fan2nd/tinyui.git?rev=8a628f031ee692bcfdab5a548e07cde2be760982#8a628f031ee692bcfdab5a548e07cde2be760982"
 dependencies = [
  "embedded-graphics",
 ]
