@@ -1,0 +1,22 @@
+[package]
+name = "p4-pc-monitor"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "p4-pc-monitor"
+path = "main.rs"
+
+[dependencies]
+sysinfo = { version = "=0.38.4", default-features = false, features = ["system", "network"] }
+# Native Rust backends only: do not compile/link the hidapi C implementation.
+[target.'cfg(windows)'.dependencies]
+hidapi = { version = "=2.6.7", default-features = false, features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+hidapi = { version = "=2.6.7", default-features = false, features = ["linux-native"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true

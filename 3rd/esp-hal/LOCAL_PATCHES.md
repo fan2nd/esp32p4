@@ -60,6 +60,13 @@ includes the independent UI framework work at the tested snapshot; final UI
 changes require their own final integration check. No fresh board test was
 performed for this refresh.
 
+## Non-blocking DPI VSYNC query (2026-11-08)
+
+Add `DsiDpi::try_wait_for_vsync` to consume a pending event without spinning.
+The display loop can continue touch/Flash-park processing while waiting for two
+fresh frame boundaries before back-buffer reuse. Existing blocking/async APIs
+are unchanged. See `docs/guides/PC_MONITOR.md` for validation status.
+
 ## DPI invalid-LLI recovery (2026-11-01)
 
 `src/mipi_dsi/dpi.rs` now enables descriptor-invalid status/signal (bit 13),

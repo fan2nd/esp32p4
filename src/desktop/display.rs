@@ -284,7 +284,7 @@ pub fn run<const POCKET: bool>(
         DpiConfig {
             in_color_format: ColorFormat::Rgb565,
             timing: FrameTiming {
-                vfp: 1023,
+                vfp: 24, // Restore about 56 Hz scanout; RGB565 retains lower memory traffic.
                 ..display::DEFAULT_DPI_CONFIG.timing
             },
             ..display::DEFAULT_DPI_CONFIG
@@ -307,11 +307,16 @@ pub fn run<const POCKET: bool>(
     let mut previous_dirty: Option<Rectangle> = None;
     let mut revision = u32::MAX;
     let mut shown_second = u64::MAX;
+    let mut retire_vsyncs = 0u8;
     loop {
         if desktop::FLASH_REQUEST.load(core::sync::atomic::Ordering::Acquire) {
             desktop::park_for_flash();
         }
         let now = Instant::now().duration_since_epoch().as_millis();
+        if retire_vsyncs != 0 && dpi.try_wait_for_vsync() {
+            retire_vsyncs -= 1;
+        }
+        ui.sync_pc(desktop::with(|s| s.pc_metrics), now);
         if touch.is_none() && now.saturating_sub(last_probe) > 1000 {
             touch = Gt911::probe(&mut i2c);
             last_probe = now;
@@ -450,15 +455,16 @@ pub fn run<const POCKET: bool>(
             shown_second = second;
         }
         ui.tick_home(now);
-        if let Some(dirty) = ui.dirty() {
+        if let Some(dirty) = ui.dirty().filter(|_| retire_vsyncs == 0) {
             ui.render_with_extra_damage(&mut Panel(dpi.framebuffer_mut()), previous_dirty)
                 .unwrap();
             previous_dirty = Some(dirty);
             dpi.commit();
-            for _ in 0..3 {
-                dpi.wait_for_vsync();
-            }
+            // Two fresh frame boundaries cover the descriptor ring/prefetch before reuse.
+            // Poll completion on subsequent input loops instead of blocking touch for 3 frames.
+            let _ = dpi.try_wait_for_vsync();
+            retire_vsyncs = 2;
         }
-        Delay::new().delay_millis(5);
+        Delay::new().delay_millis(1);
     }
 }

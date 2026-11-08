@@ -339,6 +339,7 @@ async fn wifi(control: &mut embassy_net_esp_hosted::Control<'_>, stack: Stack<'s
     let mut enabled = true; // Control::init starts Wi-Fi; restore the saved switch below.
     let mut reconnect = true;
     let mut next_retry = 0u64;
+    let mut auto_time_attempted = false;
     let mut connected_ssid = heapless::String::<32>::new();
     desktop::with(|s| {
         if !s.settings.wifi_enabled {
@@ -367,7 +368,7 @@ async fn wifi(control: &mut embassy_net_esp_hosted::Control<'_>, stack: Stack<'s
         });
         match command {
             Some(Command::SyncTime) => {
-                // Manual request only: connection and reconnect never trigger SNTP.
+                // Home clock taps and online-without-time requests share this path.
                 let ready = enabled && stack.is_link_up() && stack.config_v4().is_some();
                 desktop::with(|s| {
                     s.view.message = if ready {
@@ -378,7 +379,9 @@ async fn wifi(control: &mut embassy_net_esp_hosted::Control<'_>, stack: Stack<'s
                     s.view.revision += 1;
                 });
                 if ready {
+                    auto_time_attempted = true;
                     let synced = sync_time(stack).await;
+                    log::info!("desktop: time synchronized={}", synced.is_some());
                     desktop::with(|s| {
                         if let Some(utc) = synced {
                             s.view.utc = Some((utc, Instant::now().as_secs()));
@@ -607,6 +610,22 @@ async fn wifi(control: &mut embassy_net_esp_hosted::Control<'_>, stack: Stack<'s
                 s.view.revision += 1;
             }
         });
+        // Retry once on a new connection only while the clock has no valid time.
+        if ip.is_none() {
+            auto_time_attempted = false;
+        }
+        if !auto_time_attempted && ip.is_some() {
+            auto_time_attempted = desktop::with(|s| {
+                if s.view.utc.is_some() {
+                    true
+                } else if s.command.is_none() {
+                    s.command = Some(Command::SyncTime);
+                    true
+                } else {
+                    false
+                }
+            });
+        }
         Timer::after_millis(50).await;
     }
 }

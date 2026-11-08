@@ -289,7 +289,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     config.manufacturer = Some("P4 Lab");
     config.product = Some("P4 Desktop Keyboard + Audio + VIA Drive");
     config.serial_number = Some("P4-DESKTOP-001");
-    config.device_release = 0x0200; // UAC2 + HS endpoint descriptors.
+    config.device_release = 0x0201; // UAC2 + HS endpoint descriptors.
     config.self_powered = true;
     config.max_power = 0;
     let mut descriptors = [0; 1024];
@@ -303,6 +303,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
     let mut keyboard_state = State::new();
     let mut consumer_state = State::new();
     let mut raw_state = State::new();
+    let mut pc_monitor = waveshare_p4_eth::driver::pc_monitor::PcMonitor::default();
     let mut pointer_state = State::new();
     let mut usb_status = UsbStatus { configured: false };
     let msc_bus = RefCell::new(None);
@@ -346,7 +347,7 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
         &mut raw_state,
         HidConfig {
             report_descriptor: RAW_DESC,
-            request_handler: None,
+            request_handler: Some(&mut pc_monitor),
             poll_ms: 4,
             max_packet_size: 32,
         },
@@ -795,11 +796,15 @@ impl embassy_usb::Handler for UsbStatus {
                     .add(0x808)
                     .cast::<u32>()
                     .read_volatile()
-            } >> 1 & 3;
+            } >> 1
+                & 3;
             log::info!("desktop: USB negotiated speed={} (0=HS)", speed);
         }
         desktop::with(|s| {
             s.view.usb = on;
+            if !on {
+                s.pc_metrics = None;
+            }
             s.view.revision += 1;
             s.reports.clear();
             s.pointer_reports.clear();
@@ -815,6 +820,7 @@ impl embassy_usb::Handler for UsbStatus {
                 s.view.revision += 1;
             }
             if !active {
+                s.pc_metrics = None;
                 s.reports.clear();
                 s.pointer_reports.clear();
             }
@@ -833,5 +839,7 @@ const CONSUMER_DESC: &[u8] = &[
 ];
 const RAW_DESC: &[u8] = &[
     0x06, 0x60, 0xff, 0x09, 0x61, 0xa1, 1, 0x09, 0x62, 0x15, 0, 0x26, 0xff, 0, 0x75, 8, 0x95, 32,
-    0x81, 2, 0x09, 0x63, 0x95, 32, 0x91, 2, 0xc0,
+    0x81, 2, 0x09, 0x63, 0x95, 32, 0x91, 2,
+    // Independent 32-byte feature report for PC telemetry over the control endpoint.
+    0x09, 0x64, 0x95, 32, 0xb1, 2, 0xc0,
 ];

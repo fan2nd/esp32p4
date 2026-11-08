@@ -18,6 +18,7 @@ pub mod driver {
     pub mod hosted_bus;
     pub mod hosted_net;
     pub mod hosted_v3;
+    pub mod pc_monitor;
     pub mod sd_card;
     pub mod touch;
     pub mod usb_audio;

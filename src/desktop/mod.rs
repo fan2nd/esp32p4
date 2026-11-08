@@ -1,9 +1,11 @@
 //! Shared desktop state. Core 0 owns USB/radio; core 1 owns display and touch.
 pub mod controls;
 pub mod display;
+pub mod font;
 pub mod home_image;
 pub mod page;
 pub mod password_keyboard;
+pub mod pc_monitor;
 #[cfg(feature = "pocket-ui")]
 pub mod pocket;
 pub mod protocol;
@@ -53,6 +55,7 @@ pub struct View {
     pub revision: u32,
 }
 pub struct Shared {
+    pub pc_metrics: Option<(protocol::Metrics, u64)>,
     pub settings: crate::desktop::settings::Settings,
     pub reset_requested: bool,
     pub ble_enable_command: Option<bool>,
@@ -68,6 +71,7 @@ pub struct Shared {
 impl Shared {
     pub fn new(keymap: Keymap, settings: crate::desktop::settings::Settings) -> Self {
         Self {
+            pc_metrics: None,
             ble_name_command: None,
             ble_enable_command: None,
             wifi_busy: false,

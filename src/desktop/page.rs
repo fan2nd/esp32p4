@@ -54,21 +54,21 @@ fn rgb(r: u8, g: u8, b: u8) -> Rgb565 {
     Rgb565::new(r >> 3, g >> 2, b >> 3)
 }
 fn background() -> Rgb565 {
-    rgb(0xe8, 0xf7, 0xff)
+    rgb(0xf2, 0xf3, 0xf5)
 }
 fn ink() -> Rgb565 {
-    rgb(0x18, 0x2d, 0x44)
+    rgb(0x20, 0x24, 0x2b)
 }
 fn accent() -> Rgb565 {
-    rgb(0x26, 0x7b, 0x9a)
+    rgb(0x25, 0x63, 0xc4)
 }
 fn style() -> Style {
     Style {
         background: Rgb565::WHITE,
         foreground: ink(),
         accent: accent(),
-        border: rgb(0x75, 0xa6, 0xba),
-        pressed: rgb(0xc1, 0xea, 0xfa),
+        border: rgb(0xb4, 0xb8, 0xc0),
+        pressed: rgb(0xda, 0xe7, 0xfc),
         radius: 8,
         padding: 4,
         align: Alignment::Center,
@@ -103,8 +103,10 @@ pub enum Action {
 }
 pub struct Ui {
     #[cfg(feature = "pocket-ui")]
-    pub(crate) pocket: Option<alloc::boxed::Box<core::cell::RefCell<crate::desktop::pocket::Painter>>>,
+    pub(crate) pocket:
+        Option<alloc::boxed::Box<core::cell::RefCell<crate::desktop::pocket::Painter>>>,
     pub home: Option<crate::desktop::home_image::Player>,
+    pc: crate::desktop::pc_monitor::Dashboard,
     scene: Scene<72>,
     page: u8,
     networks: Vec<Network, 64>,
@@ -140,6 +142,7 @@ impl Ui {
             #[cfg(feature = "pocket-ui")]
             pocket: None,
             home: None,
+            pc: crate::desktop::pc_monitor::Dashboard::default(),
             scene: Scene::new(rect(0, 0, WIDTH, HEIGHT), background()),
             page: 0,
             networks: Vec::new(),
@@ -173,14 +176,23 @@ impl Ui {
     pub fn dirty(&self) -> Option<Rectangle> {
         self.scene.damage()
     }
+    pub fn sync_pc(
+        &mut self,
+        snapshot: Option<(crate::desktop::protocol::Metrics, u64)>,
+        now: u64,
+    ) {
+        if self.pc.update(snapshot, now) && self.page == 0 {
+            self.invalidate(crate::desktop::pc_monitor::AREA);
+        }
+    }
     pub fn tick_home(&mut self, now: u64) {
         if self
             .home
             .as_mut()
-            .is_some_and(|p| p.tick(now, self.page == 0))
+            .is_some_and(|p| p.tick(now, self.page == 0 && !self.pc.live))
             && self.page == 0
         {
-            self.invalidate(rect(5, 170, 350, 326));
+            self.invalidate(crate::desktop::pc_monitor::AREA);
         }
     }
     fn invalidate(&mut self, r: Rectangle) {
@@ -289,9 +301,9 @@ impl Ui {
                     let mut p = Panel::new(20 + k as u16, macro_bounds(k));
                     p.base.style = Style {
                         background: if self.pressed & (1 << k) != 0 {
-                            rgb(0x26, 0x91, 0xb5)
+                            rgb(0x25, 0x63, 0xc4)
                         } else {
-                            rgb(0xcd, 0xe4, 0xef)
+                            rgb(0xe3, 0xe5, 0xe9)
                         },
                         ..style()
                     };
@@ -610,9 +622,9 @@ impl Ui {
             if self.page == 3 && changed {
                 self.scene.update(20 + k as u16, |w| {
                     w.base_mut().style.background = if pressed & (1 << k) != 0 {
-                        rgb(0x26, 0x91, 0xb5)
+                        rgb(0x25, 0x63, 0xc4)
                     } else {
-                        rgb(0xcd, 0xe4, 0xef)
+                        rgb(0xe3, 0xe5, 0xe9)
                     }
                 });
                 self.invalidate(macro_bounds(k));
@@ -632,7 +644,9 @@ impl Ui {
     ) -> Result<(), D::Error> {
         #[cfg(feature = "pocket-ui")]
         if let Some(painter) = &self.pocket {
-            painter.borrow_mut().render(&self.scene, target, rect(0, 0, WIDTH, HEIGHT))?;
+            painter
+                .borrow_mut()
+                .render(&self.scene, target, rect(0, 0, WIDTH, HEIGHT))?;
             return self.overlays(&mut target.clipped(&rect(0, 0, WIDTH, HEIGHT)));
         }
         self.scene.render_full(target)?;
@@ -693,41 +707,46 @@ impl Ui {
                 status_icon(target, Point::new(16, 76), 0, self.wifi)?;
                 status_icon(target, Point::new(66, 76), 1, self.ble)?;
                 status_icon(target, Point::new(116, 76), 2, self.usb)?;
-                text(
-                    &mut target.clipped(&rect(12, 122, 336, 28)),
-                    &self.ip,
-                    Point::new(12, 122),
-                    ink(),
+                super::font::draw(
+                    &mut target.clipped(&rect(12, 122, 336, 28)), &self.ip,
+                    Point::new(12, 122), 16, ink(), background(),
                 )?;
-                text(
-                    &mut target.clipped(&rect(12, 150, 336, 20)),
-                    &self.weather,
-                    Point::new(12, 150),
-                    ink(),
+                super::font::draw(
+                    &mut target.clipped(&rect(12, 150, 336, 20)), &self.weather,
+                    Point::new(12, 148), 16, ink(), background(),
                 )?;
-                let image_clip = target.bounding_box().intersection(&rect(5, 170, 350, 326));
-                if let Some(image) = self.home.as_ref().filter(|p| p.width != 0) {
-                    // Reduced upload resolution keeps the same homepage area.
-                    for pixel in image_clip.points() {
-                        let x = (pixel.x - 5) as usize * image.width / 350;
-                        let y = (pixel.y - 170) as usize * image.height / 326;
-                        let color = image.pixels[y * image.width + x];
-                        target.draw_iter([Pixel(
-                            pixel,
+                if self.pc.live {
+                    self.pc.draw(target)?;
+                } else {
+                    let image = self.home.as_ref().filter(|p| p.width != 0);
+                    let (width, height) =
+                        image.map_or((700, WHALE.len() / 700 / 3), |p| (p.width, p.height));
+                    let area = crate::desktop::pc_monitor::AREA;
+                    // Fit without stretching, centered between the status header and navigation.
+                    let w =
+                        (area.size.height as usize * width / height).min(area.size.width as usize);
+                    let h = w * height / width;
+                    let origin = area.top_left
+                        + Point::new(
+                            (area.size.width as usize - w) as i32 / 2,
+                            (area.size.height as usize - h) as i32 / 2,
+                        );
+                    let bounds = Rectangle::new(origin, Size::new(w as u32, h as u32));
+                    for pixel in target.bounding_box().intersection(&bounds).points() {
+                        let x = (pixel.x - origin.x) as usize * width / w;
+                        let y = (pixel.y - origin.y) as usize * height / h;
+                        let color = if let Some(image) = image {
+                            let color = image.pixels[y * width + x];
                             Rgb565::new(
                                 (color >> 11) as u8,
                                 ((color >> 5) & 63) as u8,
                                 (color & 31) as u8,
-                            ),
-                        )])?;
-                    }
-                } else {
-                    for pixel in image_clip.points() {
-                        let x = (pixel.x - 5) as usize;
-                        let y = (pixel.y - 170) as usize;
-                        let i = (y * 2 * 700 + x * 2) * 3;
-                        target
-                            .draw_iter([Pixel(pixel, rgb(WHALE[i], WHALE[i + 1], WHALE[i + 2]))])?;
+                            )
+                        } else {
+                            let i = (y * width + x) * 3;
+                            rgb(WHALE[i], WHALE[i + 1], WHALE[i + 2])
+                        };
+                        target.draw_iter([Pixel(pixel, color)])?;
                     }
                 }
             }
@@ -841,7 +860,7 @@ impl Ui {
                         && self.password.shift)
                         || (k.action == password_keyboard::Action::Caps && self.password.caps);
                     if active {
-                        target.fill_solid(&r, rgb(0x86, 0xcd, 0xe8))?;
+                        target.fill_solid(&r, rgb(0xc4, 0xd8, 0xfa))?;
                     }
                     typing_label(&mut target.clipped(&r), label, r, ink())?;
                 }
@@ -1044,35 +1063,33 @@ fn ssid<D: DrawTarget<Color = Rgb565>>(
     }
     Ok(())
 }
-/// Fixed-width anti-aliased Inter digits keep seconds from shifting the clock.
+/// Seven-segment clock, sized to the existing invisible time-sync button.
 fn draw_clock<D: DrawTarget<Color = Rgb565>>(target: &mut D, value: &str) -> Result<(), D::Error> {
-    const FONT: &[u8] = include_bytes!("../../assets/clock-inter.a8");
-    const CELL: usize = 28 * 48;
-    for (column, c) in value.bytes().take(8).enumerate() {
-        let index = match c {
-            b'0'..=b'9' => (c - b'0') as usize,
-            b':' => 10,
-            _ => 11,
-        };
-        AlphaIcon::new(&FONT[index * CELL..(index + 1) * CELL], Size::new(28, 48)).draw(
-            target,
-            Point::new(12 + column as i32 * 28, 8),
-            ink(),
-            background(),
-        )?;
-    }
+    let style = eg_seven_segment::SevenSegmentStyleBuilder::new()
+        .digit_size(Size::new(26, 46))
+        .digit_spacing(4)
+        .segment_width(4)
+        .segment_color(ink())
+        .build();
+    Text::with_baseline(value, Point::new(12, 8), style, Baseline::Top).draw(target)?;
     Ok(())
 }
+
 fn status_icon<D: DrawTarget<Color = Rgb565>>(
     d: &mut D,
     p: Point,
     kind: u8,
     ready: bool,
 ) -> Result<(), D::Error> {
+    // Neutral surfaces keep color meaningful: each active connection has its own hue.
     let c = if ready {
-        accent()
+        match kind {
+            0 => rgb(0x18, 0x80, 0x49),
+            1 => rgb(0x25, 0x63, 0xc4),
+            _ => rgb(0x85, 0x44, 0xb0),
+        }
     } else {
-        rgb(0xb8, 0xcd, 0xd5)
+        rgb(0xa0, 0xa4, 0xac)
     };
     let mask: &[u8] = match kind {
         0 => include_bytes!("../../assets/material-icons/wifi.a8"),

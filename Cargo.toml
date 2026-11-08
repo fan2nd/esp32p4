@@ -7,6 +7,8 @@ autobins = false
 default-run = "main"
 
 [dependencies]
+eg-seven-segment = "0.2.0"
+libm = "0.2.16"
 tiny-ui = { path = "3rd/tiny-ui", default-features = false }
 embedded-graphics = "0.8.1"
 critical-section = "1.2.0"

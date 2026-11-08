@@ -495,6 +495,16 @@ impl<'d> DsiDpi<'d> {
         bridge.int_clr().write(|w| w.vsync().clear_bit_by_one());
     }
 
+    /// Consume a VSYNC event without blocking input processing on the display core.
+    pub fn try_wait_for_vsync(&mut self) -> bool {
+        let bridge = MIPI_DSI_BRIDGE::regs();
+        if !bridge.int_raw().read().vsync().bit_is_set() {
+            return false;
+        }
+        bridge.int_clr().write(|w| w.vsync().clear_bit_by_one());
+        true
+    }
+
     /// Async: yield until the next vsync event.
     pub fn wait_for_vsync_async(&mut self) -> impl Future<Output = ()> {
         VsyncFuture { _dpi: self }
