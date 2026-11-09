@@ -148,3 +148,11 @@ pub fn with<R>(f: impl FnOnce(&mut Shared) -> R) -> R {
 
 /// Playback attenuation restored from settings. 100% is unity, never positive gain.
 pub static PLAYBACK_VOLUME: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(100);
+
+// Display core updates counters; only the main core prints diagnostics.
+pub static PPA_FILLS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+pub static PPA_FAILURES: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+// Count committed UI frames, not individual PPA operations or repeated LCD scanouts.
+pub static DISPLAY_FRAMES: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+pub static DISPLAY_DRAW_US: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);

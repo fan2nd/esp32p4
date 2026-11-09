@@ -15,6 +15,7 @@ use esp_hal::{
     i2c::master::I2c,
     mipi_dsi::dpi::{ColorFormat, DpiConfig, FrameTiming},
     peripherals::{MIPI_DSI, PSRAM, VDMA_CH0},
+    ppa::{Config as PpaConfig, Input, Offset, Output, PixelFormat, Size as PpaSize, Srm},
     psram::{Psram, PsramConfig},
     time::Instant,
 };
@@ -24,7 +25,17 @@ const PANEL_WIDTH: usize = 720;
 const FRAME: usize = PANEL_WIDTH * 1280 * 2;
 
 /// The panel wire order is BGR565. UI components remain ordinary RGB565.
-struct Panel<'a>(&'a mut [u8]);
+// One small constant-color tile per display core; no extra image/framebuffer cache.
+#[repr(C, align(128))]
+struct FillTile([u16; 256]);
+struct HardwareFill {
+    engine: Option<Srm>,
+    tile: FillTile,
+}
+struct Panel<'a> {
+    framebuffer: &'a mut [u8],
+    fill: &'a mut HardwareFill,
+}
 impl OriginDimensions for Panel<'_> {
     fn size(&self) -> Size {
         Size::new(WIDTH, HEIGHT)
@@ -51,7 +62,7 @@ impl DrawTarget for Panel<'_> {
                 // writes both physical pixels, avoiding PSRAM byte stores.
                 let offset = ((y + dy) * PANEL_WIDTH + x) * 2;
                 unsafe {
-                    self.0
+                    self.framebuffer
                         .as_mut_ptr()
                         .add(offset)
                         .cast::<u32>()
@@ -68,6 +79,49 @@ impl DrawTarget for Panel<'_> {
             return Ok(());
         };
         let bgr = (u16::from(color.b()) << 11) | (u16::from(color.g()) << 5) | u16::from(color.r());
+        // Amortize DMA setup only over substantial rectangles. Integer output
+        // dimensions are exact because a 16-pixel tile uses 1/16 scale steps.
+        if area.size.width * area.size.height >= 4096 && area.size.height >= 8 {
+            if let Some(engine) = self.fill.engine.as_mut() {
+                self.fill.tile.0.fill(bgr);
+                let source = unsafe {
+                    core::slice::from_raw_parts(self.fill.tile.0.as_ptr().cast::<u8>(), 512)
+                };
+                let result = engine.run(
+                    Input {
+                        data: source,
+                        size: PpaSize {
+                            width: 16,
+                            height: 16,
+                        },
+                        format: PixelFormat::Rgb565,
+                    },
+                    Output {
+                        data: self.framebuffer,
+                        size: PpaSize {
+                            width: PANEL_WIDTH,
+                            height: 1280,
+                        },
+                        format: PixelFormat::Rgb565,
+                        offset: Offset {
+                            x: area.top_left.x as usize * 2,
+                            y: area.top_left.y as usize * 2,
+                        },
+                    },
+                    PpaConfig::default()
+                        .with_scale_x(area.size.width as f32 / 8.0)
+                        .with_scale_y(area.size.height as f32 / 8.0),
+                );
+                if result.is_ok() {
+                    desktop::PPA_FILLS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                    return Ok(());
+                }
+                // A completed/drained error leaves the rectangle unspecified. Repaint
+                // it fully with CPU stores and disable acceleration for this session.
+                self.fill.engine = None;
+                desktop::PPA_FAILURES.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+            }
+        }
         let word = u32::from(bgr) * 0x0001_0001;
         // Backgrounds and filled controls use contiguous spans instead of
         // sending every pixel through the general draw_iter clipping path.
@@ -75,7 +129,7 @@ impl DrawTarget for Panel<'_> {
             let start = (y * PANEL_WIDTH + area.top_left.x as usize * 2) * 2;
             for x in 0..area.size.width as usize {
                 unsafe {
-                    self.0
+                    self.framebuffer
                         .as_mut_ptr()
                         .add(start + x * 4)
                         .cast::<u32>()
@@ -273,9 +327,21 @@ pub fn run<const POCKET: bool>(
     ui.home = Some(crate::desktop::home_image::Player::new(
         crate::desktop::home_image::init(arena),
     ));
+    let mut fill = HardwareFill {
+        engine: Srm::take(),
+        tile: FillTile([0; 256]),
+    };
     let (front, back) = framebuffer.split_at_mut(FRAME);
-    ui.render_full(&mut Panel(front)).unwrap();
-    ui.render_full(&mut Panel(back)).unwrap();
+    ui.render_full(&mut Panel {
+        framebuffer: front,
+        fill: &mut fill,
+    })
+    .unwrap();
+    ui.render_full(&mut Panel {
+        framebuffer: back,
+        fill: &mut fill,
+    })
+    .unwrap();
     let (mut dpi, mut i2c) = display::init(
         dsi,
         vdma,
@@ -284,7 +350,10 @@ pub fn run<const POCKET: bool>(
         DpiConfig {
             in_color_format: ColorFormat::Rgb565,
             timing: FrameTiming {
-                vfp: 24, // Restore about 56 Hz scanout; RGB565 retains lower memory traffic.
+                // 60 MHz / (812 * 2463) = 30.00018 Hz. Host VFP is only 10 bits;
+                // split blanking across VBP/VFP so host and bridge stay consistent.
+                vbp: 156,
+                vfp: 1023,
                 ..display::DEFAULT_DPI_CONFIG.timing
             },
             ..display::DEFAULT_DPI_CONFIG
@@ -456,10 +525,19 @@ pub fn run<const POCKET: bool>(
         }
         ui.tick_home(now);
         if let Some(dirty) = ui.dirty().filter(|_| retire_vsyncs == 0) {
-            ui.render_with_extra_damage(&mut Panel(dpi.framebuffer_mut()), previous_dirty)
-                .unwrap();
+            let draw_started = Instant::now();
+            ui.render_with_extra_damage(
+                &mut Panel {
+                    framebuffer: dpi.framebuffer_mut(),
+                    fill: &mut fill,
+                },
+                previous_dirty,
+            )
+            .unwrap();
             previous_dirty = Some(dirty);
             dpi.commit();
+            desktop::DISPLAY_DRAW_US.fetch_add(draw_started.elapsed().as_micros() as u32, core::sync::atomic::Ordering::Relaxed);
+            desktop::DISPLAY_FRAMES.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
             // Two fresh frame boundaries cover the descriptor ring/prefetch before reuse.
             // Poll completion on subsequent input loops instead of blocking touch for 3 frames.
             let _ = dpi.try_wait_for_vsync();

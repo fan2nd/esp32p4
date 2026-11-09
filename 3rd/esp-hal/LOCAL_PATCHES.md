@@ -105,3 +105,15 @@ The Hosted adapter's 10 ms polling fallback is removed. The P4 `verify_hosted`
 release build and default-feature `cargo check --release --locked --bins` passed.
 Fresh hardware verification is pending a connected board; other chips have only
 been reviewed at source level.
+
+## Experimental ESP32-P4 PPA SRM (2026-11-10)
+
+`src/ppa.rs` adapts upstream esp-hal PR #6476 (commit
+`e045405e6f036a7d8b2ef22bc877457dc3e6eba2`, MIT OR Apache-2.0) to P4.
+It uses P4 clock/reset registers, a minimal private DMA2D MMIO layer (omitted
+by PAC 0.3), 16x16 macroblocks and the ESP-IDF DIG-734 tail-block workaround.
+No upstream chip metadata is patched: the module is explicitly P4-only.
+DMA ownership is exclusive, waits are bounded with fail-stop on an unsafe-to-release
+DMA channel, and cache operations use the existing shared cache lock.
+Destination addresses/lengths must be 128-byte aligned for internal RAM and PSRAM.
+See `../../docs/guides/PPA.md` for scope, hardware results and remaining display artifacts.

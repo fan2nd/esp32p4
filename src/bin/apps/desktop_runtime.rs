@@ -738,6 +738,15 @@ async fn run(p: esp_hal::peripherals::Peripherals, spawner: Spawner) {
                     feedback_sum.replace(0) / i64::from(feedback_count.replace(0).max(1)),
                     max_work_us
                 );
+                esp_println::println!("display PPA: fills_5s={} failures_5s={}",
+                    desktop::PPA_FILLS.swap(0, core::sync::atomic::Ordering::Relaxed),
+                    desktop::PPA_FAILURES.swap(0, core::sync::atomic::Ordering::Relaxed));
+                let window_ms = (now - stats_at).as_millis().max(1);
+                let frames = desktop::DISPLAY_FRAMES.swap(0, core::sync::atomic::Ordering::Relaxed);
+                let draw_us = desktop::DISPLAY_DRAW_US.swap(0, core::sync::atomic::Ordering::Relaxed);
+                let fps_x10 = u64::from(frames) * 10_000 / window_ms;
+                esp_println::println!("display FPS: {}.{} frames={} window_ms={} avg_render_commit_us={}",
+                    fps_x10 / 10, fps_x10 % 10, frames, window_ms, draw_us / frames.max(1));
                 stats_at = now;
                 sent = 0;
                 missing = 0;

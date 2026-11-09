@@ -413,6 +413,9 @@ unstable_driver! {
     pub mod ethernet;
     #[cfg(mipi_dsi_driver_supported)]
     pub mod mipi_dsi;
+
+    #[cfg(esp32p4)]
+    pub mod ppa;
 }
 
 /// State of the CPU saved when entering exception or interrupt
