@@ -18,13 +18,24 @@ const BLUE: Rgb565 = Rgb565::new(2, 22, 27);
 const ORANGE: Rgb565 = Rgb565::new(26, 24, 2);
 const TEAL: Rgb565 = Rgb565::new(1, 25, 12);
 
+// Six bytes per series/bucket: preserve observed excursions without retaining every sample.
+#[derive(Clone, Copy, Default)]
+struct Bucket {
+    last: u16,
+    min: u16,
+    max: u16,
+}
+
 #[derive(Default)]
 pub struct Dashboard {
     pub live: bool,
     sample: Metrics,
     received: u64,
-    cpu: [u16; 32],
-    memory: [u16; 32],
+    cpu: [Bucket; 32],
+    memory: [Bucket; 32],
+    // Two-second buckets retain one minute without a high-rate sample buffer.
+    timestamps: [u32; 32],
+    count: usize,
 }
 impl Dashboard {
     /// USB enumeration alone is not a connection: only fresh valid samples count.
@@ -34,14 +45,41 @@ impl Dashboard {
         let mut changed = self.live != live;
         if let Some((metrics, at)) = sample {
             if !self.live {
-                self.cpu.fill(metrics.cpu as u16);
-                self.memory.fill(metrics.memory as u16);
+                self.count = 0;
             }
             if !self.live || at != self.received || metrics != self.sample {
-                self.cpu.rotate_left(1);
-                self.memory.rotate_left(1);
-                self.cpu[31] = metrics.cpu as u16;
-                self.memory[31] = metrics.memory as u16;
+                let timestamp = at as u32;
+                let same_bucket =
+                    self.count > 0 && self.timestamps[self.count - 1] / 2000 == timestamp / 2000;
+                if !same_bucket {
+                    if self.count == self.cpu.len() {
+                        self.cpu.rotate_left(1);
+                        self.memory.rotate_left(1);
+                        self.timestamps.rotate_left(1);
+                    } else {
+                        self.count += 1;
+                    }
+                }
+                let index = self.count - 1;
+                for (history, value) in [
+                    (&mut self.cpu, metrics.cpu as u16),
+                    (&mut self.memory, metrics.memory as u16),
+                ] {
+                    let bucket = &mut history[index];
+                    if same_bucket {
+                        bucket.last = value;
+                        bucket.min = bucket.min.min(value);
+                        bucket.max = bucket.max.max(value);
+                    } else {
+                        // Reset extrema when rotating or opening a new time bucket.
+                        *bucket = Bucket {
+                            last: value,
+                            min: value,
+                            max: value,
+                        };
+                    }
+                }
+                self.timestamps[index] = timestamp;
                 self.sample = metrics;
                 self.received = at;
                 changed = true;
@@ -139,7 +177,22 @@ impl Dashboard {
                 .into_styled(PrimitiveStyle::with_stroke(Rgb565::new(28, 57, 29), 1))
                 .draw(target)?;
         }
-        draw_trends(target, &self.cpu, &self.memory)?;
+        draw_trends(
+            target,
+            &self.cpu[..self.count],
+            &self.memory[..self.count],
+            &self.timestamps[..self.count],
+            self.received as u32,
+        )?;
+        for (x, label) in [(50, "-60s"), (178, "-30s"), (314, "NOW")] {
+            Text::with_baseline(
+                label,
+                Point::new(x, 464),
+                MonoTextStyle::new(&FONT_6X10, MUTED),
+                Baseline::Top,
+            )
+            .draw(target)?;
+        }
         RoundedRectangle::with_equal_corners(
             Rectangle::new(Point::new(12, 486), Size::new(336, 62)),
             Size::new(14, 14),
@@ -293,8 +346,10 @@ fn draw_gauge<D: DrawTarget<Color = Rgb565>>(
 #[inline(never)]
 fn draw_trends<D: DrawTarget<Color = Rgb565>>(
     target: &mut D,
-    cpu: &[u16; 32],
-    memory: &[u16; 32],
+    cpu: &[Bucket],
+    memory: &[Bucket],
+    timestamps: &[u32],
+    now: u32,
 ) -> Result<(), D::Error> {
     // 34 KiB temporary SRAM, released before rendering the next dashboard section.
     let mut cpu_mask = Coverage::<17100> {
@@ -306,14 +361,42 @@ fn draw_trends<D: DrawTarget<Color = Rgb565>>(
         width: 285,
     };
     for (history, mask) in [(cpu, &mut cpu_mask), (memory, &mut mem_mask)] {
-        for i in 1..32 {
-            let point = |n: usize| {
-                Point::new(
-                    2 + n as i32 * 564 / 31,
-                    116 - i32::from(history[n]) * 112 / 1000,
+        // Add extrema to the same antialiasing mask as the connecting line,
+        // so overlapping coverage does not darken the curve or require another buffer.
+        for (bucket, &timestamp) in history.iter().zip(timestamps) {
+            let age = now.wrapping_sub(timestamp);
+            if age <= 60_000 {
+                let x = 566 - (age * 564 / 60_000) as i32;
+                let _ = Line::new(
+                    Point::new(x, 116 - i32::from(bucket.max) * 112 / 1000),
+                    Point::new(x, 116 - i32::from(bucket.min) * 112 / 1000),
                 )
+                .into_styled(PrimitiveStyle::with_stroke(Rgb565::WHITE, 4))
+                .draw(mask);
+            }
+        }
+        for i in 1..history.len() {
+            // Use elapsed time, not sample count; startup history remains empty.
+            let age = now.wrapping_sub(timestamps[i]);
+            if age > 60_000 {
+                continue;
+            }
+            let previous_age = now.wrapping_sub(timestamps[i - 1]);
+            let current_y = 116 - i32::from(history[i].last) * 112 / 1000;
+            let previous_y = 116 - i32::from(history[i - 1].last) * 112 / 1000;
+            let start = if previous_age > 60_000 {
+                // Clip the segment at the minute boundary without stretching old data.
+                Point::new(
+                    2,
+                    current_y
+                        + ((i64::from(previous_y - current_y) * i64::from(60_000 - age))
+                            / i64::from(previous_age - age)) as i32,
+                )
+            } else {
+                Point::new(566 - (previous_age * 564 / 60_000) as i32, previous_y)
             };
-            let _ = Line::new(point(i - 1), point(i))
+            let end = Point::new(566 - (age * 564 / 60_000) as i32, current_y);
+            let _ = Line::new(start, end)
                 .into_styled(PrimitiveStyle::with_stroke(Rgb565::WHITE, 4))
                 .draw(mask);
         }
